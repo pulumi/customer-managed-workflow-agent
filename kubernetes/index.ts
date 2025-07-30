@@ -24,7 +24,12 @@ const agent = new PulumiSelfHostedAgentComponent(
         selfHostedServiceURL: pulumiConfig.get("selfHostedServiceURL") ?? "https://api.pulumi.com",
         imagePullPolicy: pulumiConfig.get("agentImagePullPolicy") || "Always",
         agentReplicas: pulumiConfig.getNumber("agentReplicas") || 3,
-        workerServiceAccount
+        workerServiceAccount,
+        enableServiceMonitor: pulumiConfig.getBoolean("enableServiceMonitor") || false,
     },
     { dependsOn: [ns] },
 );
+
+// Export key resources for reference
+export const agentService = agent.agentService;
+export const serviceMonitor = agent.serviceMonitor;

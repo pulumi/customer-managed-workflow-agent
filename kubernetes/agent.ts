@@ -13,7 +13,8 @@ export interface PulumiSelfHostedAgentComponentArgs {
     envVars?: kubernetes.types.input.core.v1.EnvVar[]
     agentNumCpus?: number;
     agentMemQuantity?: number;
-    podTemplate?: V1Pod
+    podTemplate?: V1Pod;
+    enableServiceMonitor?: boolean;
 }
 
 export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
@@ -21,6 +22,8 @@ export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
     public readonly agentServiceAccount: kubernetes.core.v1.ServiceAccount;
     public readonly agentRole: kubernetes.rbac.v1.Role;
     public readonly agentRoleBinding: kubernetes.rbac.v1.RoleBinding;
+    public readonly agentService: kubernetes.core.v1.Service;
+    public readonly serviceMonitor?: kubernetes.apiextensions.CustomResource;
 
     labels = {
         "app.kubernetes.io/name": "customer-managed-workflow-agent",
@@ -196,6 +199,13 @@ export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
                                     agentMemQuantityEnvVar,
                                     ...(args.envVars || [])
                                 ],
+                                ports: [
+                                    {
+                                        name: "http",
+                                        containerPort: 8080,
+                                        protocol: "TCP",
+                                    },
+                                ],
                                 volumeMounts: [
                                     {
                                         name: "agent-work",
@@ -226,6 +236,63 @@ export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
                 },
             },
         }, { parent: this });
+
+        // Create service to expose metrics and health endpoints
+        this.agentService = new kubernetes.core.v1.Service("deployment-agent-service", {
+            metadata: {
+                name: "deployment-agent-service",
+                namespace: args.namespace.metadata.name,
+                labels: {
+                    ...this.labels,
+                    "app.kubernetes.io/component": "metrics",
+                },
+                annotations: {
+                    "prometheus.io/scrape": "true",
+                    "prometheus.io/port": "8080",
+                    "prometheus.io/path": "/healthz",
+                },
+            },
+            spec: {
+                selector: this.labels,
+                ports: [
+                    {
+                        name: "http",
+                        port: 8080,
+                        targetPort: 8080,
+                        protocol: "TCP",
+                    },
+                ],
+                type: "ClusterIP",
+            },
+        }, { parent: this });
+
+        // Optionally create ServiceMonitor for Prometheus Operator
+        if (args.enableServiceMonitor) {
+            this.serviceMonitor = new kubernetes.apiextensions.CustomResource("deployment-agent-servicemonitor", {
+                apiVersion: "monitoring.coreos.com/v1",
+                kind: "ServiceMonitor",
+                metadata: {
+                    name: "deployment-agent-servicemonitor",
+                    namespace: args.namespace.metadata.name,
+                    labels: this.labels,
+                },
+                spec: {
+                    selector: {
+                        matchLabels: {
+                            ...this.labels,
+                            "app.kubernetes.io/component": "metrics",
+                        },
+                    },
+                    endpoints: [
+                        {
+                            port: "http",
+                            path: "/healthz",
+                            interval: "30s",
+                        },
+                    ],
+                },
+            }, { parent: this });
+        }
 
         this.registerOutputs();
     }
