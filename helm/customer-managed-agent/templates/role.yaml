@@ -1,0 +1,24 @@
+{{- if and .Values.rbac.create .Values.rbac.createRole }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "customer-managed-deployment-agent.fullname" . }}-deployment-agent
+  labels:
+  {{- include "customer-managed-deployment-agent.labels" . | nindent 4 }}
+  annotations:
+    pulumi.com/autonamed: "true"
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - pods/log
+  - configmaps
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+  - update
+  - delete
+{{- end }}

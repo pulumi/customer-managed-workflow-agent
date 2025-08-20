@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "customer-managed-deployment-agent.fullname" . }}-deployment-agent-pool
+  labels:
+  {{- include "customer-managed-deployment-agent.labels" . | nindent 4 }}
+  annotations:
+    app.kubernetes.io/name: pulumi-deployment-agent-pool
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: {{ default "RollingUpdate" .Values.deploymentStrategy }}
+  selector:
+    matchLabels:
+    {{- include "customer-managed-deployment-agent.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        app.kubernetes.io/name: customer-managed-deployment-agent
+      {{- include "customer-managed-deployment-agent.selectorLabels" . | nindent 8 }}
+      {{- if .Values.podLabels }}
+        {{ toYaml .Values.podLabels | indent 8 }}
+      {{- end }}
+    spec:
+      containers:
+      {{- if .Values.extraSidecars }}
+      {{- toYaml .Values.extraSidecars  | nindent 6 }}
+      {{- end}}
+      - env:
+        - name: PULUMI_AGENT_DEPLOY_TARGET
+          value: kubernetes
+        - name: PULUMI_AGENT_SHARED_VOLUME_DIRECTORY
+          value: {{ quote .Values.customerManagedAgentConfig.sharedVolumeDirectory
+            }}
+        - name: PULUMI_AGENT_SERVICE_URL
+          valueFrom:
+            configMapKeyRef:
+              key: PULUMI_AGENT_SERVICE_URL
+              name: {{ include "customer-managed-deployment-agent.fullname" . }}-config
+        - name: PULUMI_AGENT_IMAGE
+          valueFrom:
+            configMapKeyRef:
+              key: PULUMI_AGENT_IMAGE
+              name: {{ include "customer-managed-deployment-agent.fullname" . }}-config
+        - name: PULUMI_AGENT_IMAGE_PULL_POLICY
+          valueFrom:
+            configMapKeyRef:
+              key: PULUMI_AGENT_IMAGE_PULL_POLICY
+              name: {{ include "customer-managed-deployment-agent.fullname" . }}-config
+        - name: PULUMI_AGENT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              key: PULUMI_AGENT_TOKEN
+              name: {{ quote .Values.customerManagedAgentConfig.accessTokenSecretName }}
+        - name: PULUMI_AGENT_SERVICE_ACCOUNT_NAME
+          value: {{ include "customer-managed-deployment-agent.fullname" . }}-deployment-agent
+        - name: PULUMI_AGENT_NUM_CPUS
+          value: {{ quote .Values.customerManagedAgentConfig.numberCPUs }}
+        - name: PULUMI_AGENT_MEM_QUANTITY
+          value: {{ quote .Values.customerManagedAgentConfig.memoryQuantity
+            }}
+        image: {{ include "customer-managed-deployment-agent.imageName" . | quote }}
+        {{- if .Values.useLivenessProbe }}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        {{- end }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- if .Values.securityContext }}
+        securityContext:
+        {{- toYaml .Values.securityContext | nindent 12 }}
+        {{- end }}
+        {{- if .Values.resources }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+        {{- end }}
+        name: agent
+        volumeMounts:
+        - mountPath: /mnt/work
+          name: agent-work
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "customer-managed-deployment-agent.fullname" . }}-deployment-agent
+      {{- if .Values.terminationGracePeriodSeconds }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- end }}
+      {{- if .Values.initContainers  }}
+      initContainers:
+      {{- with .Values.initContainers }}
+        {{- toYaml . | nindent 6 }}
+      {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      volumes:
+      - emptyDir: {}
+        name: agent-work
+      - configMap:
+          name: {{ include "customer-managed-deployment-agent.fullname" . }}-agent-config
+        name: agent-config
