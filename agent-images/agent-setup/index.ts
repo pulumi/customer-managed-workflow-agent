@@ -6,7 +6,7 @@ export = async () => {
   const config = new pulumi.Config();
   const accessToken = config.requireSecret("runnerAccessToken");
   const vpcId = config.get("vpdId");
-  const amiPrefix = config.get("amiPrefix") || "pulumi-deployment-agent";
+  const amiPrefix = config.get("amiPrefix") || "pulumi-workflow-agent";
   const instanceType = config.get("instanceType") || "t3.small";
 
   let vpcArgs: aws.ec2.GetVpcArgs = {default: true};
@@ -46,8 +46,8 @@ export = async () => {
   });
 
   const userData = pulumi.interpolate`#!/bin/bash
-  sudo echo -e "token: \"${accessToken}\"" >> /home/ubuntu/.pulumi/bin/customer-managed-deployment-agent/pulumi-deployment-agent.yaml
-  sudo systemctl start deployment_agent.service`;
+  sudo echo -e "token: \"${accessToken}\"" >> /home/ubuntu/.pulumi/bin/customer-managed-workflow-agent/pulumi-workflow-agent.yaml
+  sudo systemctl start workflow_agent.service`;
 
   const instance = new aws.ec2.Instance("agent", {
     ami: ami.id,
@@ -56,7 +56,7 @@ export = async () => {
     subnetId: subnets.ids.apply(ids => ids[0]),
     userData: userData,
     tags: {
-      "Name": "deployment-agent"
+      "Name": "workflow-agent"
     }
   });
 };

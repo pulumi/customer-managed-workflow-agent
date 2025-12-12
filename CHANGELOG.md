@@ -1,6 +1,10 @@
 CHANGELOG
 =========
 
+2.0.0 (2025-12-15)
+
+* Rename the repository and executable to customer-managed-workflow-agent
+
 1.4.1 (2025-08-01)
 
 * Adding support for a pod template to the deployment runners

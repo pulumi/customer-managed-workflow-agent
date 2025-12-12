@@ -23,26 +23,26 @@ export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
               }
         });
 
-        this.agentDeployment = new kubernetes.apps.v1.Deployment("deployment-agent-pool", {
+        this.agentDeployment = new kubernetes.apps.v1.Deployment("workflow-agent-pool", {
             metadata: {
-                name: "deployment-agent-pool",
+                name: "workflow-agent-pool",
                 namespace: args.namespace.metadata.name,
                 annotations: {
-                    "app.kubernetes.io/name": "pulumi-deployment-agent-pool",
+                    "app.kubernetes.io/name": "pulumi-workflow-agent-pool",
                 },
             },
             spec: {
                 replicas: 1,
                 selector: {
                     matchLabels: {
-                        app: "pulumi-deployment-agent-pool",
+                        app: "pulumi-workflow-agent-pool",
                     },
                 },
                 template: {
                     metadata: {
                         labels: {
-                            app: "pulumi-deployment-agent-pool",
-                            "app.kubernetes.io/name": "pulumi-deployment-agent-pool",
+                            app: "pulumi-workflow-agent-pool",
+                            "app.kubernetes.io/name": "pulumi-workflow-agent-pool",
                         },
                     },
                     spec: {

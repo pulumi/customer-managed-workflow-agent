@@ -14,19 +14,19 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   annotations:
-    app.kubernetes.io/name: pulumi-deployment-agent-pool
-  name: deployment-agent-pool
+    app.kubernetes.io/name: pulumi-workflow-agent-pool
+  name: workflow-agent-pool
   namespace: <desired-namespace>
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: pulumi-deployment-agent-pool
+      app: pulumi-workflow-agent-pool
   template:
     metadata:
       labels:
-        app: pulumi-deployment-agent-pool
-        app.kubernetes.io/name: pulumi-deployment-agent-pool
+        app: pulumi-workflow-agent-pool
+        app.kubernetes.io/name: pulumi-workflow-agent-pool
     spec:
       containers:
       - name: agent

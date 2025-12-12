@@ -1,11 +1,11 @@
-Description=pulumi deployment agent
+Description=pulumi workflow agent
 
 Wants=network.target
 After=syslog.target network-online.target
 
 [Service]
 WorkingDirectory=/home/ubuntu/.pulumi/bin/
-ExecStart=/home/ubuntu/.pulumi/bin/customer-managed-deployment-agent/customer-managed-deployment-agent run
+ExecStart=/home/ubuntu/.pulumi/bin/customer-managed-workflow-agent/customer-managed-workflow-agent run
 KillMode=process
 
 [Install]

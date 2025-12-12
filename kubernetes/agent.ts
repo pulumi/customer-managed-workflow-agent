@@ -23,7 +23,7 @@ export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
     public readonly agentRoleBinding: kubernetes.rbac.v1.RoleBinding;
 
     labels = {
-        "app.kubernetes.io/name": "customer-managed-deployment-agent",
+        "app.kubernetes.io/name": "customer-managed-workflow-agent",
     };
 
     constructor(name: string, args: PulumiSelfHostedAgentComponentArgs, opts?: pulumi.ComponentResourceOptions) {
@@ -53,14 +53,14 @@ export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
             }
         }, { parent: this });
 
-        this.agentServiceAccount = new kubernetes.core.v1.ServiceAccount("deployment-agent", {
+        this.agentServiceAccount = new kubernetes.core.v1.ServiceAccount("workflow-agent", {
             metadata: {
                 namespace: args.namespace.metadata.name,
                 labels: this.labels,
             },
         }, { parent: this });
 
-        this.agentRole = new kubernetes.rbac.v1.Role("deployment-agent", {
+        this.agentRole = new kubernetes.rbac.v1.Role("workflow-agent", {
             metadata: {
                 namespace: args.namespace.metadata.name,
                 labels: this.labels,
@@ -74,7 +74,7 @@ export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
             ],
         }, { parent: this });
 
-        this.agentRoleBinding = new kubernetes.rbac.v1.RoleBinding("deployment-agent", {
+        this.agentRoleBinding = new kubernetes.rbac.v1.RoleBinding("workflow-agent", {
             metadata: {
                 namespace: args.namespace.metadata.name,
                 labels: this.labels,
@@ -121,12 +121,12 @@ export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
             }
         }
 
-        this.agentDeployment = new kubernetes.apps.v1.Deployment("deployment-agent-pool", {
+        this.agentDeployment = new kubernetes.apps.v1.Deployment("workflow-agent-pool", {
             metadata: {
-                name: "deployment-agent-pool",
+                name: "workflow-agent-pool",
                 namespace: args.namespace.metadata.name,
                 annotations: {
-                    "app.kubernetes.io/name": "pulumi-deployment-agent-pool",
+                    "app.kubernetes.io/name": "pulumi-workflow-agent-pool",
                 },
                 labels: this.labels,
             },

@@ -1,10 +1,10 @@
 # Building an AWS AMI
 
-In this folder are tools to build an AWS AMI with the correct software to run a Pulumi Deployments Runner and then deploy an EC2 instance with that AMI on it.
+In this folder are tools to build an AWS AMI with the correct software to run a Pulumi Workflow Agent and then deploy an EC2 instance with that AMI on it.
 
 Although the Packer template and the Pulumi program will work, they are meant as a reference to help you get started. You should customize them to comply with your company's security and operational guidelines.
 
-Note: deployment runners are only available to Pulumi customers on the Business Critical subscription. For more information, visit the [Pulumi Contact us page](https://www.pulumi.com/contact/) and select "I want to talk to someone in Sales" from the drop down.
+Note: workflow runners are only available to Pulumi customers on the Business Critical subscription. For more information, visit the [Pulumi Contact us page](https://www.pulumi.com/contact/) and select "I want to talk to someone in Sales" from the drop down.
 
 If you have any questions about this, then please visit our [Support Portal](https://support.pulumi.com).
 
@@ -18,9 +18,9 @@ You must have the following software installed:
 
 You should also have created a Deployment Runner pool by logging into [Pulumi Cloud](https://app.pulumi.com) as an administrator of your organization, going to the Settings section of the menu and clicking on the "Deployment runners" link. 
 
-Next click on the "Add pool" button. Enter a name and (optional) description and click "Create pool". This will then show you a deployment runner access token that looks like this:
+Next click on the "Add pool" button. Enter a name and (optional) description and click "Create pool". This will then show you a workflow runner access token that looks like this:
 
-![Image showing a deployment runner access token](img/access-token.png)
+![Image showing a workflow runner access token](img/access-token.png)
 
 Make a note of this as you will need it when you create a runner later on and once you refresh or leave this page you will not see it again and have to create a new runner pool.
 
@@ -34,7 +34,7 @@ There are a number of variables available to allow you to customize some of the 
 
 - `ami_prefix`
   - Prefix the name of AMI with the contents of this variable
-  - Default: `pulumi-deployment-agent`
+  - Default: `pulumi-workflow-agent`
 - `pulumi_version`
   - Version of the [Pulumi docker container](https://hub.docker.com/r/pulumi/pulumi) to download. It must be a [valid version of Pulumi](https://www.pulumi.com/docs/install/versions/)
   - Default: `latest`
@@ -49,8 +49,8 @@ You can either update the default values in the Packer template or see [the Pack
 
 ### Steps
 
-1. Clone this repo: `git clone https://github.com/pulumi/customer-managed-deployment-agent.git`
-1. Change to the correct sub-folder folder: `cd customer-managed-deployment-agent/packer`
+1. Clone this repo: `git clone https://github.com/pulumi/customer-managed-workflow-agent.git`
+1. Change to the correct sub-folder folder: `cd customer-managed-workflow-agent/packer`
 1. Run `packer init .` to initialize the setup
 1. Run `packer validate .` to ensure that the template is correct
 1. Run `packer build .` to build the AMI

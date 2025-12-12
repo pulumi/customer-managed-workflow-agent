@@ -8,7 +8,7 @@ export const ns = new k8s.core.v1.Namespace("stack-namespace", {
 });
 
 // Configure this service account for your cloud settings
-const workerServiceAccount = new k8s.core.v1.ServiceAccount("deployment-agent", {
+const workerServiceAccount = new k8s.core.v1.ServiceAccount("workflow-agent", {
     metadata: {
         namespace: ns.metadata.name,
     },
