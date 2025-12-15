@@ -1,3 +1,3 @@
-name: pulumi-deployment-agent
+name: pulumi-workflow-agent
 runtime: nodejs
-description: A Pulumi program to create an EC2 instance running the Pulumi deployment self-managed deployment agent
+description: A Pulumi program to create an EC2 instance running the Pulumi self-managed workflow agent

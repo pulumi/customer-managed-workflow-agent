@@ -1,12 +1,12 @@
 apiVersion: v1
 data:
-  PULUMI_AGENT_IMAGE: "pulumi/customer-managed-deployment-agent:latest-arm64"
+  PULUMI_AGENT_IMAGE: "pulumi/customer-managed-workflow-agent:latest-arm64"
   PULUMI_AGENT_IMAGE_PULL_POLICY: "IfNotPresent"
   PULUMI_AGENT_SERVICE_URL: "https://api.pulumi.com"
 kind: ConfigMap
 metadata:
   labels:
-    app.kubernetes.io/name: customer-managed-deployment-agent
+    app.kubernetes.io/name: customer-managed-workflow-agent
   name: agent-config
   namespace: cmda
 
@@ -26,8 +26,8 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   labels:
-    app.kubernetes.io/name: customer-managed-deployment-agent
-  name: deployment-agent
+    app.kubernetes.io/name: customer-managed-workflow-agent
+  name: workflow-agent
   namespace: cmda
 
 ---
@@ -36,8 +36,8 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   labels:
-    app.kubernetes.io/name: customer-managed-deployment-agent
-  name: deployment-agent
+    app.kubernetes.io/name: customer-managed-workflow-agent
+  name: workflow-agent
   namespace: cmda
 rules:
   - apiGroups:
@@ -60,16 +60,16 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   labels:
-    app.kubernetes.io/name: customer-managed-deployment-agent
-  name: deployment-agent
+    app.kubernetes.io/name: customer-managed-workflow-agent
+  name: workflow-agent
   namespace: cmda
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: deployment-agent
+  name: workflow-agent
 subjects:
   - kind: ServiceAccount
-    name: deployment-agent
+    name: workflow-agent
 
 ---
 
@@ -77,20 +77,20 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   annotations:
-    app.kubernetes.io/name: pulumi-deployment-agent-pool
+    app.kubernetes.io/name: pulumi-workflow-agent-pool
   labels:
-    app.kubernetes.io/name: customer-managed-deployment-agent
-  name: deployment-agent-pool
+    app.kubernetes.io/name: customer-managed-workflow-agent
+  name: workflow-agent-pool
   namespace: cmda
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app.kubernetes.io/name: customer-managed-deployment-agent
+      app.kubernetes.io/name: customer-managed-workflow-agent
   template:
     metadata:
       labels:
-        app.kubernetes.io/name: customer-managed-deployment-agent
+        app.kubernetes.io/name: customer-managed-workflow-agent
     spec:
       containers:
         - env:
@@ -118,13 +118,13 @@ spec:
                 secretKeyRef:
                   key: PULUMI_AGENT_TOKEN
                   name: agent-secret
-          image: pulumi/customer-managed-deployment-agent:latest-arm64
+          image: pulumi/customer-managed-workflow-agent:latest-arm64
           imagePullPolicy: IfNotPresent
           name: agent
           volumeMounts:
             - mountPath: /mnt/work
               name: agent-work
-      serviceAccountName: deployment-agent
+      serviceAccountName: workflow-agent
       volumes:
         - emptyDir: {}
           name: agent-work

@@ -6,7 +6,7 @@ The order of troubleshooting should be as follows:
 
 1. Identify the pods you're looking for - primarily `pulumi-workflow-runner-*` pods
     > **Note:** The agent pool has logs, as well, it's probably best to have a terminal open running:
-    `kubectl logs -n <namespace> -l 'app.kubernetes.io/name=customer-managed-deployment-agent' -f`
+    `kubectl logs -n <namespace> -l 'app.kubernetes.io/name=customer-managed-workflow-agent' -f`
 
 2. Run these commands in separate terminal windows:
 

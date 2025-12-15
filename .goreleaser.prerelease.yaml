@@ -1,6 +1,6 @@
 version: 2
 dist: goreleaser
-project_name: customer-managed-deployment-agent
+project_name: customer-managed-workflow-agent
 changelog:
   disable: true
 release:
@@ -8,9 +8,9 @@ release:
 checksum:
   name_template: 'checksums.txt'
 builds:
-  - id: customer-managed-deployment-agent
-    binary: customer-managed-deployment-agent
-    dir: ./pulumi-service/cmd/customer-managed-deployment-agent
+  - id: customer-managed-workflow-agent
+    binary: customer-managed-workflow-agent
+    dir: ./pulumi-service/cmd/customer-managed-workflow-agent
     goarch:
       - amd64
       - arm64
@@ -20,7 +20,7 @@ builds:
     ldflags:
       - -s
       - -w
-      - -X github.com/pulumi/pulumi-service/cmd/customer-managed-deployment-agent/version.Version={{.Tag}}
+      - -X github.com/pulumi/pulumi-service/cmd/customer-managed-workflow-agent/version.Version={{.Tag}}
       - -extldflags '-static'
     env:
       - CGO_ENABLED=0
@@ -62,15 +62,15 @@ builds:
       post: cp {{ .Path }} workflow-runner-embeddable # Rename the file for easy archiving.
 
 archives:
-  - id: customer-managed-deployment-agent
+  - id: customer-managed-workflow-agent
     ids:
-      - customer-managed-deployment-agent
+      - customer-managed-workflow-agent
       - workflow-runner
     files:
-      - workflow-runner-embeddable          # Always include the linux-x64 binary, which is used by the docker container.
-      - pulumi-deployment-agent.yaml.sample # Include the config file sample
+      - workflow-runner-embeddable        # Always include the linux-x64 binary, which is used by the docker container.
+      - pulumi-workflow-agent.yaml.sample # Include the config file sample
     name_template: >-
-      customer-managed-deployment-agent-
+      customer-managed-workflow-agent-
       {{- .Tag }}-
       {{- .Os }}-
       {{- if eq .Arch "amd64" }}x64
@@ -78,9 +78,30 @@ archives:
     format_overrides:
       - goos: windows
         formats: [ "zip" ]
-    wrap_in_directory: customer-managed-deployment-agent
+    wrap_in_directory: customer-managed-workflow-agent
 
 dockers:
+  - image_templates:
+      - "{{ .Env.REPO_OWNER }}/customer-managed-workflow-agent:{{ .Tag }}-amd64"
+    use: buildx
+    goarch: amd64
+    build_flag_templates:
+      - "--platform=linux/amd64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+  - image_templates:
+      - "{{ .Env.REPO_OWNER }}/customer-managed-workflow-agent:{{ .Tag }}-arm64"
+    use: buildx
+    goarch: arm64
+    build_flag_templates:
+      - "--platform=linux/arm64"
+      - "--label=org.opencontainers.image.created={{.Date}}"
+      - "--label=org.opencontainers.image.title={{.ProjectName}}"
+      - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+      - "--label=org.opencontainers.image.version={{.Version}}"
+  # Backward compatibility: also publish under the old image name for prereleases
   - image_templates:
       - "{{ .Env.REPO_OWNER }}/customer-managed-deployment-agent:{{ .Tag }}-amd64"
     use: buildx
@@ -103,6 +124,11 @@ dockers:
       - "--label=org.opencontainers.image.version={{.Version}}"
 
 docker_manifests:
+  - name_template: "{{ .Env.REPO_OWNER }}/customer-managed-workflow-agent:{{ .Tag }}"
+    image_templates:
+      - "{{ .Env.REPO_OWNER }}/customer-managed-workflow-agent:{{ .Tag }}-amd64"
+      - "{{ .Env.REPO_OWNER }}/customer-managed-workflow-agent:{{ .Tag }}-arm64"
+  # Backward compatibility manifests for the old image name
   - name_template: "{{ .Env.REPO_OWNER }}/customer-managed-deployment-agent:{{ .Tag }}"
     image_templates:
       - "{{ .Env.REPO_OWNER }}/customer-managed-deployment-agent:{{ .Tag }}-amd64"

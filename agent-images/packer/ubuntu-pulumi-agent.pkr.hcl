@@ -13,7 +13,7 @@ locals {
 
 variable "ami_prefix" {
   type    = string
-  default = "pulumi-deployment-agent"
+  default = "pulumi-workflow-agent"
 }
 
 variable "pulumi_version" {
@@ -53,8 +53,8 @@ build {
   ]
 
   provisioner "file" {
-    source      = "deployment_agent.service_ubuntu"
-    destination = "/home/ubuntu/deployment_agent.service"
+    source      = "workflow_agent.service_ubuntu"
+    destination = "/home/ubuntu/workflow_agent.service"
   }
 
   provisioner "shell" {
@@ -70,8 +70,8 @@ build {
       "sudo apt-get update",
       "echo Install docker",
       "sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y",
-      "curl -fsSL https://raw.githubusercontent.com/pulumi/customer-managed-deployment-agent/main/install.sh | sh",
-      "sudo cp /home/ubuntu/deployment_agent.service /etc/systemd/system/deployment_agent.service",
+      "curl -fsSL https://raw.githubusercontent.com/pulumi/customer-managed-workflow-agent/main/install.sh | sh",
+      "sudo cp /home/ubuntu/workflow_agent.service /etc/systemd/system/workflow_agent.service",
       "sudo docker pull pulumi/pulumi:${var.pulumi_version}"
     ]
   }

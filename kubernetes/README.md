@@ -20,7 +20,7 @@ For example:
 ```bash
 pulumi config set agentNamespace cmda
 pulumi config set --secret selfHostedAgentsAccessToken pul-...
-pulumi config set agentImage pulumi/customer-managed-deployment-agent:latest-amd64
+pulumi config set agentImage pulumi/customer-managed-workflow-agent:latest-amd64
 pulumi config set agentReplicas 3
 ```
 
@@ -34,7 +34,7 @@ This folder also contains a [raw kubernetes yaml file](./raw_deployment.yaml) fo
 
 ## Fargate Support
 
-To enable Fargate you will need to use `customer-managed-deployment-agent` >= `1.3.7` and add the following to your pulumi code:
+To enable Fargate you will need to use `customer-managed-workflow-agent` >= `1.3.7` and add the following to your pulumi code:
 
 ```typescript
 // Create a Fargate profile
@@ -216,7 +216,7 @@ For more information on merge patches, see:
 
 ## Troubleshooting
 
-If you encounter issues with the deployment agent, please refer to our [troubleshooting guide](./troubleshooting/README.md) which includes:
+If you encounter issues with the workflow agent, please refer to our [troubleshooting guide](./troubleshooting/README.md) which includes:
 
 * Diagnostic steps for identifying and resolving common problems
 * Monitoring scripts to track pod status and resource usage

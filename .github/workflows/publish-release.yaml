@@ -11,7 +11,7 @@ env:
   ESC_ACTION_OIDC_AUTH: true
   ESC_ACTION_OIDC_ORGANIZATION: pulumi
   ESC_ACTION_OIDC_REQUESTED_TOKEN_TYPE: urn:pulumi:token-type:access_token:organization
-  ESC_ACTION_ENVIRONMENT: github-secrets/pulumi-customer-managed-deployment-agent
+  ESC_ACTION_ENVIRONMENT: github-secrets/pulumi-customer-managed-workflow-agent
   ESC_ACTION_EXPORT_ENVIRONMENT_VARIABLES: GITHUB_TOKEN=PULUMI_BOT_TOKEN
 
 jobs:
@@ -31,7 +31,7 @@ jobs:
       matrix:
         job:
           - name: Dispatch docs workflow
-            run-command: pulumictl create cli-docs-build "${{ github.ref_name }}" --event-type "customer-managed-deployment-agent"
+            run-command: pulumictl create cli-docs-build "${{ github.ref_name }}" --event-type "customer-managed-workflow-agent"
     steps:
       - name: Fetch secrets from ESC
         id: esc-secrets
