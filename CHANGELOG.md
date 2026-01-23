@@ -1,6 +1,10 @@
 CHANGELOG
 =========
 
+2.0.1 (2026-01-23)
+
+* Fix `debug workflow-runner` command on Kubernetes
+
 2.0.0 (2025-12-15)
 
 * Rename the repository and executable to customer-managed-workflow-agent
