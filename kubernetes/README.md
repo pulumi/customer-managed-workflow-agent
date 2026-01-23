@@ -18,13 +18,16 @@ pulumi up
 For example:
 
 ```bash
-pulumi config set agentNamespace cmda
+pulumi config set agentNamespace cmwa
 pulumi config set --secret selfHostedAgentsAccessToken pul-...
 pulumi config set agentImage pulumi/customer-managed-workflow-agent:latest-amd64
 pulumi config set agentReplicas 3
 ```
 
-Optionally you can set an `agentImagePullPolicy` to a [Kubernetes supported value](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy), which defaults to `Always`.
+Optionally you can set an `agentImagePullPolicy` to a
+[Kubernetes supported value][k8s-pull-policy], which defaults to `Always`.
+
+[k8s-pull-policy]: https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy
 
 ## Monitoring and Metrics
 
@@ -71,36 +74,124 @@ If you're not using the Prometheus Operator, you can manually configure Promethe
 ```
 
 The health endpoint provides insights into:
-- Agent operational status (healthy/unhealthy)
-- Last activity timestamp for detecting stuck agents
-- Current timestamp for time synchronization validation
+
+* Agent operational status (healthy/unhealthy)
+* Last activity timestamp for detecting stuck agents
+* Current timestamp for time synchronization validation
 
 ## workerServiceAccount
 
-There is a ServiceAccount(`workerServiceAccount`) in the `index.ts` can be configured to support cloud service accounts.
+There is a ServiceAccount(`workerServiceAccount`) in the `index.ts` that can be
+configured to support cloud service accounts.
 
-This folder also contains a [raw kubernetes yaml file](./raw_deployment.yaml) for reference.
+To generate static YAML manifests instead of deploying directly, see the
+[Generating Static YAML Manifests](#generating-static-yaml-manifests) section.
+
+## Generating Static YAML Manifests
+
+Instead of deploying directly to a Kubernetes cluster, you can render the
+manifests to a local directory. This is useful for:
+
+* Reviewing generated YAML before applying
+* GitOps workflows where manifests are committed to a repository
+* Air-gapped environments where Pulumi can't access the cluster directly
+
+### Usage
+
+```bash
+# Set the output directory
+pulumi config set renderYamlToDirectory ./rendered-manifests
+
+# Clean any previous renders and generate fresh YAML files
+rm -rf ./rendered-manifests
+pulumi up
+```
+
+The manifests will be generated in subdirectories:
+
+* `0-crd/` - Custom Resource Definitions (if any)
+* `1-manifest/` - All other Kubernetes resources
+
+### Applying Rendered Manifests
+
+Due to Kubernetes resource ordering, apply the manifests in two steps to ensure
+the namespace exists before namespaced resources are created:
+
+```bash
+# Step 1: Apply the CRD's if they exist
+kubectl apply -f ./rendered-manifests/0-crd/
+
+# Step 2: Apply namespace first
+kubectl apply -f ./rendered-manifests/1-manifest/v1-namespace-*.yaml
+
+# Step 3: Apply all manifests (namespace will show "unchanged")
+kubectl apply -f ./rendered-manifests/1-manifest/
+
+# Verify deployment
+kubectl get all -n <your-namespace>
+```
+
+Alternatively, you can simply run `kubectl apply` twice:
+
+```bash
+kubectl apply -f ./rendered-manifests/1-manifest/
+# Some resources may fail on first apply due to namespace race condition
+kubectl apply -f ./rendered-manifests/1-manifest/
+```
+
+### ⚠️ Important Notes
+
+**Secrets appear in plaintext** in the rendered YAML files. The
+`selfHostedAgentsAccessToken` will be base64-encoded (standard Kubernetes
+Secret encoding) but not encrypted. Ensure you:
+
+* Do not commit rendered manifests containing secrets to version control
+* Use appropriate file permissions on the output directory
+* Consider using external secret management for production
+  (e.g., Sealed Secrets, External Secrets Operator)
+
+**Mode switching causes resource replacement.** When you toggle
+`renderYamlToDirectory` on or off, Pulumi replaces the provider which cascades
+to all resources. This is expected because the two modes are fundamentally
+different (cluster deployment vs file rendering).
+
+### Switching Back to Direct Deployment
+
+```bash
+# Remove the config to deploy directly again
+pulumi config rm renderYamlToDirectory
+
+# Deploy to the cluster (resources will be replaced)
+pulumi up
+```
 
 ## Fargate Support
 
-To enable Fargate you will need to use `customer-managed-workflow-agent` >= `1.3.7` and add the following to your pulumi code:
+To enable Fargate you will need to use `customer-managed-workflow-agent` >=
+`1.3.7` and add the following to your pulumi code:
 
 ```typescript
 // Create a Fargate profile
-const fargateProfile = new aws.eks.FargateProfile("cmda-fargate-profile", {
+const fargateProfile = new aws.eks.FargateProfile("cmwa-fargate-profile", {
     clusterName: cluster.eksCluster.name,
     podExecutionRoleArn: new aws.iam.Role("fargatePodExecutionRole", {
-        assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({ Service: "eks-fargate-pods.amazonaws.com" }),
+        assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
+            Service: "eks-fargate-pods.amazonaws.com",
+        }),
     }).arn,
     subnetIds: eksVpc.privateSubnetIds,
-    selectors: [{ namespace: <desired namespace>, labels: { "app.kubernetes.io/name": "workflow-runner" } }]
+    selectors: [{
+        namespace: <desired namespace>,
+        labels: { "app.kubernetes.io/name": "workflow-runner" },
+    }],
 });
 ```
 
 Additionally, there are two options for choosing your node size:
 
 * `agentNumCpus` - Number of CPU's for the fargate instance
-* `agentMemQuantity` - Quantity of memory in Gigabytes for the fargate instance. i.e. 4 = 4Gi
+* `agentMemQuantity` - Quantity of memory in Gigabytes for the fargate instance
+  (i.e. 4 = 4Gi)
 
 ### 📌 Note
 
@@ -110,30 +201,41 @@ Additionally, there are two options for choosing your node size:
 
 ### AWS
 
-To optimize the performance of your deployments, you can use a pull-through cache in Amazon Elastic Container Registry (ECR). This allows you to cache frequently used images closer to your Kubernetes cluster, reducing the time it takes to pull images, and to prevent rate limiting.
+To optimize the performance of your deployments, you can use a pull-through
+cache in Amazon Elastic Container Registry (ECR). This allows you to cache
+frequently used images closer to your Kubernetes cluster, reducing the time
+it takes to pull images, and to prevent rate limiting.
 
-For more information and an example of how to set up a pull-through cache in ECR using Pulumi, refer to the following:
+For more information and an example of how to set up a pull-through cache in
+ECR using Pulumi, refer to the following:
 
-* [Pulumi ECR Cache Example](https://github.com/pulumi/examples/tree/master/aws-ts-ecr-cache).
-* [Implementing AWS ECR Pull Through cache for EKS cluster- most in-depth implementation details](https://marcincuber.medium.com/implementing-aws-ecr-pull-through-cache-for-eks-cluster-most-in-depth-implementation-details-e51395568034)
+* [Pulumi ECR Cache Example][ecr-cache-example]
+* [Implementing AWS ECR Pull Through cache for EKS cluster][ecr-cache-guide]
 
+[ecr-cache-example]: https://github.com/pulumi/examples/tree/master/aws-ts-ecr-cache
+[ecr-cache-guide]: https://marcincuber.medium.com/implementing-aws-ecr-pull-through-cache-for-eks-cluster-most-in-depth-implementation-details-e51395568034
 
 ## Pod Spec Configuration
 
-**⚠️ Advanced Feature Warning**: This is a very advanced feature that can potentially break your worker pods if configured incorrectly. Only use this if you have a deep understanding of Kubernetes pod specifications and are comfortable debugging pod scheduling issues.
+**⚠️ Advanced Feature Warning**: This is a very advanced feature that can
+potentially break your worker pods if configured incorrectly. Only use this
+if you have a deep understanding of Kubernetes pod specifications and are
+comfortable debugging pod scheduling issues.
 
-The agent can be configured to use custom pod specifications for worker pods. This allows you to customize:
+The agent can be configured to use custom pod specifications for worker pods.
+This allows you to customize:
 
-- **Node selectors** - Control which nodes the pods can be scheduled on
-- **Tolerations** - Allow pods to run on nodes with specific taints
-- **Init containers** - Run setup tasks before the main container starts
-- **Resource limits and requests** - Control CPU and memory allocation
-- **Environment variables** - Pass configuration to worker containers
-- **Volume mounts** - Mount additional storage or configuration
+* **Node selectors** - Control which nodes the pods can be scheduled on
+* **Tolerations** - Allow pods to run on nodes with specific taints
+* **Init containers** - Run setup tasks before the main container starts
+* **Resource limits and requests** - Control CPU and memory allocation
+* **Environment variables** - Pass configuration to worker containers
+* **Volume mounts** - Mount additional storage or configuration
 
 ### Example Pod Specification
 
-Here's a complete example of a custom pod specification that demonstrates various configuration options:
+Here's a complete example of a custom pod specification that demonstrates
+various configuration options:
 
 ```typescript
 import { V1Pod } from "@kubernetes/client-node";
@@ -165,7 +267,7 @@ const pod: V1Pod = {
                 key: "dedicated",
                 operator: "Equal",
                 value: "pulumi-workload",
-                effect: "NoSchedule",        // Allow scheduling on dedicated workload nodes
+                effect: "NoSchedule",  // Allow on dedicated nodes
             },
         ],
         
@@ -233,7 +335,8 @@ const agent = new PulumiSelfHostedAgentComponent("agent", {
 
 #### Method 2: Load from YAML File
 
-Load a pod specification from a YAML file. See `examples/pod.yaml` for a complete example:
+Load a pod specification from a YAML file. See `examples/pod.yaml` for a
+complete example:
 
 ```typescript
 import * as fs from "fs";
@@ -250,22 +353,105 @@ const agent = new PulumiSelfHostedAgentComponent("agent", {
 });
 ```
 
-
 ### Merge Patches
 
-The pod specification uses Kubernetes [Strategic Merge Patch](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/update-api-object-kubectl-patch/#strategic-merge-patch) semantics. This means:
+The pod specification uses Kubernetes [Strategic Merge Patch][smp] semantics.
+This means:
 
-- **Additive**: New fields are added to the pod spec
-- **Selective**: Only specified fields are modified, others remain unchanged
-- **Strategic**: Kubernetes applies intelligent merging based on field types (e.g., arrays are merged, not replaced)
+* **Additive**: New fields are added to the pod spec
+* **Selective**: Only specified fields are modified, others remain unchanged
+* **Strategic**: Kubernetes applies intelligent merging based on field types
+  (e.g., arrays are merged, not replaced)
 
 For more information on merge patches, see:
-- [Kubernetes Strategic Merge Patch Documentation](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/update-api-object-kubectl-patch/#strategic-merge-patch)
-- [JSON Patch vs Strategic Merge Patch](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/update-api-object-kubectl-patch/#use-a-json-patch-to-update-a-deployment)
+
+* [Kubernetes Strategic Merge Patch Documentation][smp]
+* [JSON Patch vs Strategic Merge Patch][json-patch]
+
+[smp]: https://kubernetes.io/docs/tasks/manage-kubernetes-objects/update-api-object-kubectl-patch/#strategic-merge-patch
+[json-patch]: https://kubernetes.io/docs/tasks/manage-kubernetes-objects/update-api-object-kubectl-patch/#use-a-json-patch-to-update-a-deployment
+
+## Local Development with kind
+
+[kind](https://kind.sigs.k8s.io/) (Kubernetes IN Docker) provides a simple way
+to run a local Kubernetes cluster for development and testing.
+
+### Requirements
+
+* Docker installed and running
+* [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) installed
+* kubectl installed
+
+### Quick Start
+
+```bash
+# Create a local cluster
+kind create cluster --name pulumi-agent-dev
+
+# Verify the cluster is running
+kubectl cluster-info --context kind-pulumi-agent-dev
+
+# Configure the agent
+pulumi config set agentNamespace cmwa
+pulumi config set --secret selfHostedAgentsAccessToken <your-token>
+pulumi config set agentImage pulumi/customer-managed-workflow-agent:latest-amd64
+pulumi config set agentReplicas 1
+pulumi config set agentImagePullPolicy IfNotPresent
+
+# Deploy directly to kind
+pulumi up
+
+# Verify deployment
+kubectl get pods -n cmwa
+```
+
+### Generate YAML for Production
+
+After testing locally, you can generate static YAML manifests for production deployment:
+
+```bash
+# Switch to YAML rendering mode
+pulumi config set renderYamlToDirectory ./rendered-manifests
+
+# Clean previous renders and generate fresh manifests
+rm -rf ./rendered-manifests
+pulumi destroy --yes  # Clear state
+pulumi up --yes       # Generate YAML files
+
+# Review the generated manifests
+
+ls ./rendered-manifests/0-crd/
+ls ./rendered-manifests/1-manifest/
+
+# The YAML files can now be applied to your production cluster:
+# kubectl apply -f ./rendered-manifests/1-manifest/v1-namespace-*.yaml
+# kubectl apply -f ./rendered-manifests/1-manifest/
+```
+
+### Tips for Local Development
+
+* Use `agentReplicas: 1` to reduce resource usage
+* Set `agentImagePullPolicy: IfNotPresent` to avoid re-pulling images
+* Use the `renderYamlToDirectory` option to inspect generated manifests
+  before production deployment
+
+### Cleanup
+
+```bash
+# Destroy Pulumi resources
+pulumi destroy
+
+# Delete the kind cluster
+kind delete cluster --name pulumi-agent-dev
+
+# Clean up rendered manifests
+rm -rf ./rendered-manifests
+```
 
 ## Troubleshooting
 
-If you encounter issues with the workflow agent, please refer to our [troubleshooting guide](./troubleshooting/README.md) which includes:
+If you encounter issues with the workflow agent, please refer to our
+[troubleshooting guide](./troubleshooting/README.md) which includes:
 
 * Diagnostic steps for identifying and resolving common problems
 * Monitoring scripts to track pod status and resource usage
