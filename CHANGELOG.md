@@ -1,6 +1,10 @@
 CHANGELOG
 =========
 
+## Unreleased
+
+* Expose `/healthz` endpoint to Prometheus and add documentation in `kubernetes/README.md`
+
 2.0.1 (2026-01-23)
 
 * Fix `debug workflow-runner` command on Kubernetes

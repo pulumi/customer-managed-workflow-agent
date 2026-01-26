@@ -26,6 +26,55 @@ pulumi config set agentReplicas 3
 
 Optionally you can set an `agentImagePullPolicy` to a [Kubernetes supported value](https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy), which defaults to `Always`.
 
+## Monitoring and Metrics
+
+The deployment agent exposes health information on port 8080 at the `/healthz` endpoint. This can be used for monitoring and metrics collection.
+
+### Basic Health Monitoring
+
+The agent automatically creates a Kubernetes Service that exposes the health endpoint with Prometheus annotations for automatic discovery:
+
+```json
+{
+  "status": "healthy",
+  "currentTime": "2025-06-22T21:15:38.338784381Z",
+  "lastActivity": "2025-06-22T21:15:11.931901718Z"
+}
+```
+
+### Prometheus Integration
+
+To enable Prometheus monitoring with the Prometheus Operator:
+
+```bash
+pulumi config set enableServiceMonitor true
+```
+
+This creates a ServiceMonitor resource that automatically configures Prometheus to scrape the agent's health endpoint every 30 seconds.
+
+### Manual Prometheus Configuration
+
+If you're not using the Prometheus Operator, you can manually configure Prometheus to scrape the service using the annotations:
+
+```yaml
+- job_name: 'pulumi-deployment-agent'
+  kubernetes_sd_configs:
+    - role: service
+  relabel_configs:
+    - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+      action: keep
+      regex: true
+    - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+      action: replace
+      target_label: __metrics_path__
+      regex: (.+)
+```
+
+The health endpoint provides insights into:
+- Agent operational status (healthy/unhealthy)
+- Last activity timestamp for detecting stuck agents
+- Current timestamp for time synchronization validation
+
 ## workerServiceAccount
 
 There is a ServiceAccount(`workerServiceAccount`) in the `index.ts` can be configured to support cloud service accounts.
