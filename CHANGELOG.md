@@ -4,6 +4,7 @@ CHANGELOG
 ## Unreleased
 
 * Expose `/healthz` endpoint to Prometheus and add documentation in `kubernetes/README.md`
+* Fix critical and high severity vulnerabilities by upgrading `@kubernetes/client-node` from `^0.16.0` to `^1.4.0` in the Kubernetes Pulumi component. This resolves CVEs in jsonpath-plus (RCE), form-data, qs, tar, tough-cookie, and removes the deprecated `request` package.
 
 2.0.1 (2026-01-23)
 

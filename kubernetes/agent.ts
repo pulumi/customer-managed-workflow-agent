@@ -1,6 +1,6 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as kubernetes from "@pulumi/kubernetes";
-import { V1Pod } from "@kubernetes/client-node";
+import type { V1Pod } from "@kubernetes/client-node";
 
 export interface PulumiSelfHostedAgentComponentArgs {
     namespace: kubernetes.core.v1.Namespace;
