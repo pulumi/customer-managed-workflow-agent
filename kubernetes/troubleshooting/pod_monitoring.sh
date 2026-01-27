@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Default values
-NAMESPACE="cmda"
+NAMESPACE="cmwa"
 POD_SELECTOR=""
 POD_PATTERN=""
 INTERVAL=1

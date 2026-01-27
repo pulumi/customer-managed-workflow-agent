@@ -424,6 +424,7 @@ ls ./rendered-manifests/0-crd/
 ls ./rendered-manifests/1-manifest/
 
 # The YAML files can now be applied to your production cluster:
+# kubectl apply -f ./rendered-manifests/0-crd/
 # kubectl apply -f ./rendered-manifests/1-manifest/v1-namespace-*.yaml
 # kubectl apply -f ./rendered-manifests/1-manifest/
 ```

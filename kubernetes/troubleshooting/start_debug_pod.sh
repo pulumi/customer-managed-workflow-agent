@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # Default values
-NAMESPACE="cmda"
+NAMESPACE="cmwa"
 LABEL="app.kubernetes.io/component=pulumi-workflow"
 CONTAINER_NAME="pulumi-workflow"
 DEBUG_POD_SUFFIX="debug"

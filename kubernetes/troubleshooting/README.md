@@ -49,7 +49,7 @@ This script provides general-purpose pod monitoring with flexible pod selection 
 
 Options:
 
-- `-n` - Namespace (default: cmda)
+- `-n` - Namespace (default: cmwa)
 - `-s` - Label selector (e.g. "app=myapp")
 - `-p` - Pod name pattern (regex)
 - `-i` - Monitoring interval in seconds (default: 1)
@@ -71,7 +71,7 @@ This script specifically monitors Pulumi workflow pods by targeting the label 'a
 
 Options:
 
-- `-n` - Namespace (default: cmda)
+- `-n` - Namespace (default: cmwa)
 - `-i` - Monitoring interval in seconds (default: 1)
 - `-m` - Maximum number of logs to keep (default: 10)
 - `-d` - Log directory (default: logs)
@@ -93,14 +93,14 @@ This script creates a debug pod based on an existing Pulumi workflow pod. It's p
 
 Options:
 
-- `-n` - Namespace (default: cmda)
+- `-n` - Namespace (default: cmwa)
 - `-l` - Label selector (default: app.kubernetes.io/component=pulumi-workflow)
 - `-c` - Container name (default: pulumi-workflow)
 - `-s` - Debug pod suffix (default: debug)
 
 ### kyverno.yaml
 
-This file contains a Kyverno policy that automatically enforces node affinity for pods in the CMDA namespace. It ensures all pods in the specified namespace are scheduled on the designated node(s), solving potential scheduling issues.
+This file contains a Kyverno policy that automatically enforces node affinity for pods in the cmwa namespace. It ensures all pods in the specified namespace are scheduled on the designated node(s), solving potential scheduling issues.
 
 > **Note:** This is only an example configuration. You will need to modify the node hostname identified by `<PLACEHOLDER>` and namespace values to match your specific environment before applying.
 
@@ -114,7 +114,7 @@ kubectl get clusterpolicy
 
 The policy has two key functions:
 
-1. **Mutation**: Automatically adds a nodeSelector to any pod created in the CMDA namespace
+1. **Mutation**: Automatically adds a nodeSelector to any pod created in the cmwa namespace
 2. **Validation**: Ensures pods have the required nodeSelector (prevents deployment without the selector)
 
 To use this policy:
