@@ -1,7 +1,7 @@
 #!/bin/sh
 
 # Default values
-NAMESPACE="cmda"
+NAMESPACE="cmwa"
 INTERVAL=1
 MAX_LOGS=10
 LOG_DIR="logs"

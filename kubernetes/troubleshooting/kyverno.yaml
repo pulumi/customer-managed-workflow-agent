@@ -1,7 +1,7 @@
 apiVersion: kyverno.io/v1
 kind: ClusterPolicy
 metadata:
-  name: enforce-cmda-node-affinity
+  name: enforce-cmwa-node-affinity
 spec:
   admission: true
   background: true
@@ -13,7 +13,7 @@ spec:
           kinds:
           - Pod
           namespaces:
-          - cmda
+          - cmwa
     exclude:
       any:
       - resources:
@@ -32,7 +32,7 @@ spec:
           kinds:
           - Pod
           namespaces:
-          - cmda
+          - cmwa
     exclude:
       any:
       - resources:
@@ -42,7 +42,7 @@ spec:
     skipBackgroundRequests: true
     validate:
       allowExistingViolations: true
-      message: Pods in the 'cmda' namespace must be scheduled on nodes
+      message: Pods in the 'cmwa' namespace must be scheduled on nodes
         with label 'kubernetes.io/hostname=<PLACEHOLDER>'
       pattern:
         spec:
