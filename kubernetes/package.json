@@ -2,11 +2,12 @@
     "name": "pulumi_agent_kubernetes",
     "main": "index.ts",
     "devDependencies": {
-        "@types/node": "^18"
+        "@types/node": "^18",
+        "typescript": "^5.9.3"
     },
     "dependencies": {
         "@pulumi/kubernetes": "^4.14.0",
         "@pulumi/pulumi": "^3.0.0",
-        "@kubernetes/client-node": "^0.16.0"
+        "@kubernetes/client-node": "^1.4.0"
     }
 }
