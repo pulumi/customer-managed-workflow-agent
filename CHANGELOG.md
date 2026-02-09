@@ -3,6 +3,10 @@ CHANGELOG
 
 ## Unreleased
 
+2.1.1 (2026-02-09)
+
+* Fix the User-Agent version in container images
+
 2.1.0 (2026-01-30)
 
 * feat: improved support for non-root execution
