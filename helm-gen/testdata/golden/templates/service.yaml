@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "chart.fullname" . }}-service
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+    app.kubernetes.io/component: metrics
+  annotations:
+    prometheus.io/scrape: {{ .Values.service.prometheus.scrape | quote }}
+    prometheus.io/port: {{ .Values.service.port | quote }}
+    prometheus.io/path: {{ .Values.service.prometheus.path | quote }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "chart.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: 8080
+      protocol: TCP

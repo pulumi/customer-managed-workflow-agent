@@ -1,0 +1,12 @@
+apiVersion: v2
+name: pulumi-deployment-agent
+description: Helm chart for deploying the Pulumi Customer-Managed Workflow Agent
+type: application
+version: 0.1.0
+appVersion: 2.1.0
+maintainers:
+  - name: Pulumi
+    url: https://github.com/pulumi
+home: https://github.com/pulumi/customer-managed-workflow-agent
+sources:
+  - https://github.com/pulumi/customer-managed-workflow-agent

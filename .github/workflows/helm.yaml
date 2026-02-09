@@ -1,0 +1,129 @@
+name: helm-ci
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  helm-gen-test:
+    name: Go Tests (helm-gen)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: helm-gen/go.sum
+
+      - name: Vet
+        run: cd helm-gen && go vet ./...
+
+      - name: Test
+        run: cd helm-gen && go test ./... -count=1
+
+  helm-chart-validate:
+    name: Helm Chart Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+          cache-dependency-path: helm-gen/go.sum
+
+      - name: Build helm-gen
+        run: make helm-gen-build
+
+      - name: Generate Helm chart
+        run: |
+          ./bin/helm-gen \
+            --input-dir helm-gen/testdata/input \
+            --output-dir /tmp/helm-output/pulumi-deployment-agent
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Helm lint
+        run: helm lint --strict /tmp/helm-output/pulumi-deployment-agent
+
+      - name: "Helm template: defaults"
+        run: |
+          helm template test /tmp/helm-output/pulumi-deployment-agent \
+            --set agent.token=test-token
+
+      - name: "Helm template: serviceMonitor enabled"
+        run: |
+          helm template test /tmp/helm-output/pulumi-deployment-agent \
+            --set agent.token=test-token \
+            --set serviceMonitor.enabled=true
+
+      - name: "Helm template: RBAC disabled"
+        run: |
+          helm template test /tmp/helm-output/pulumi-deployment-agent \
+            --set agent.token=test-token \
+            --set rbac.create=false
+
+      - name: "Helm template: ServiceAccount disabled"
+        run: |
+          helm template test /tmp/helm-output/pulumi-deployment-agent \
+            --set agent.token=test-token \
+            --set serviceAccount.create=false
+
+      - name: "Helm template: existing secret"
+        run: |
+          helm template test /tmp/helm-output/pulumi-deployment-agent \
+            --set agent.existingSecretName=my-secret
+
+      - name: "Helm template: worker SA disabled"
+        run: |
+          helm template test /tmp/helm-output/pulumi-deployment-agent \
+            --set agent.token=test-token \
+            --set workerServiceAccount.create=false
+
+      - name: "Helm template: readinessProbe enabled"
+        run: |
+          helm template test /tmp/helm-output/pulumi-deployment-agent \
+            --set agent.token=test-token \
+            --set readinessProbe.enabled=true
+
+      - name: "Helm template: image registry"
+        run: |
+          helm template test /tmp/helm-output/pulumi-deployment-agent \
+            --set agent.token=test-token \
+            --set image.registry=my-reg.io
+
+      - name: "Helm template: no token should fail"
+        run: |
+          if helm template test /tmp/helm-output/pulumi-deployment-agent 2>/dev/null; then
+            echo "ERROR: helm template should fail without agent.token or existingSecretName"
+            exit 1
+          fi
+          echo "Correctly failed with missing token"
+
+  helm-drift-check:
+    name: Helm Chart Drift Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for kubernetes/ changes without helm-gen/ updates
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          K8S_CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- 'kubernetes/agent.ts' 'kubernetes/index.ts' | wc -l)
+          HELM_CHANGED=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA" -- 'helm-gen/' | wc -l)
+          if [ "$K8S_CHANGED" -gt 0 ] && [ "$HELM_CHANGED" -eq 0 ]; then
+            echo "::warning::kubernetes/ source files changed but helm-gen/ was not updated. Please verify the Helm chart is still in sync."
+          fi

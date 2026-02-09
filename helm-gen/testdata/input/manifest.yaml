@@ -1,0 +1,195 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: helm-namespace
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    pulumi.com/autonamed: "true"
+  labels:
+    app.kubernetes.io/name: customer-managed-workflow-agent
+  name: workflow-agent-a1b2c3d4
+  namespace: helm-namespace
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  annotations:
+    pulumi.com/autonamed: "true"
+  name: workflow-agent-e5f6a7b8
+  namespace: helm-namespace
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    app.kubernetes.io/name: customer-managed-workflow-agent
+  name: agent-config
+  namespace: helm-namespace
+data:
+  PULUMI_AGENT_IMAGE: "pulumi/customer-managed-workflow-agent:latest"
+  PULUMI_AGENT_IMAGE_PULL_POLICY: IfNotPresent
+  PULUMI_AGENT_SERVICE_URL: "https://api.pulumi.com"
+  worker-pod.json: "{}"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agent-secret
+  namespace: helm-namespace
+data:
+  PULUMI_AGENT_TOKEN: cGxhY2Vob2xkZXItdG9rZW4=
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  annotations:
+    pulumi.com/autonamed: "true"
+  labels:
+    app.kubernetes.io/name: customer-managed-workflow-agent
+  name: workflow-agent-c9d0e1f2
+  namespace: helm-namespace
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/log
+      - configmaps
+    verbs:
+      - create
+      - get
+      - list
+      - watch
+      - update
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  annotations:
+    pulumi.com/autonamed: "true"
+  labels:
+    app.kubernetes.io/name: customer-managed-workflow-agent
+  name: workflow-agent-a3b4c5d6
+  namespace: helm-namespace
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: workflow-agent-c9d0e1f2
+subjects:
+  - kind: ServiceAccount
+    name: workflow-agent-a1b2c3d4
+    namespace: helm-namespace
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  annotations:
+    app.kubernetes.io/name: pulumi-workflow-agent-pool
+  labels:
+    app.kubernetes.io/name: customer-managed-workflow-agent
+  name: workflow-agent-pool
+  namespace: helm-namespace
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: customer-managed-workflow-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: customer-managed-workflow-agent
+    spec:
+      containers:
+        - env:
+            - name: PULUMI_AGENT_DEPLOY_TARGET
+              value: kubernetes
+            - name: PULUMI_AGENT_SHARED_VOLUME_DIRECTORY
+              value: /mnt/work
+            - name: PULUMI_AGENT_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  key: PULUMI_AGENT_SERVICE_URL
+                  name: agent-config
+            - name: PULUMI_AGENT_IMAGE
+              valueFrom:
+                configMapKeyRef:
+                  key: PULUMI_AGENT_IMAGE
+                  name: agent-config
+            - name: PULUMI_AGENT_IMAGE_PULL_POLICY
+              valueFrom:
+                configMapKeyRef:
+                  key: PULUMI_AGENT_IMAGE_PULL_POLICY
+                  name: agent-config
+            - name: PULUMI_AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: PULUMI_AGENT_TOKEN
+                  name: agent-secret
+            - name: PULUMI_AGENT_SERVICE_ACCOUNT_NAME
+              value: workflow-agent-e5f6a7b8
+            - name: PULUMI_AGENT_NUM_CPUS
+            - name: PULUMI_AGENT_MEM_QUANTITY
+          image: "pulumi/customer-managed-workflow-agent:latest"
+          imagePullPolicy: IfNotPresent
+          name: agent
+          ports:
+            - containerPort: 8080
+              name: http
+              protocol: TCP
+          volumeMounts:
+            - mountPath: /mnt/work
+              name: agent-work
+            - mountPath: /mnt/worker-pod.json
+              name: agent-config
+              readOnly: true
+              subPath: worker-pod.json
+      serviceAccountName: workflow-agent-a1b2c3d4
+      volumes:
+        - emptyDir: {}
+          name: agent-work
+        - configMap:
+            name: agent-config
+          name: agent-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  annotations:
+    prometheus.io/path: /healthz
+    prometheus.io/port: "8080"
+    prometheus.io/scrape: "true"
+  labels:
+    app.kubernetes.io/component: metrics
+    app.kubernetes.io/name: customer-managed-workflow-agent
+  name: deployment-agent-service
+  namespace: helm-namespace
+spec:
+  ports:
+    - name: http
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+  selector:
+    app.kubernetes.io/name: customer-managed-workflow-agent
+  type: ClusterIP
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app.kubernetes.io/name: customer-managed-workflow-agent
+  name: deployment-agent-servicemonitor
+  namespace: helm-namespace
+spec:
+  endpoints:
+    - interval: "30s"
+      path: /healthz
+      port: http
+  selector:
+    matchLabels:
+      app.kubernetes.io/component: metrics
+      app.kubernetes.io/name: customer-managed-workflow-agent

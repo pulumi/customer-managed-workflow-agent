@@ -1,0 +1,150 @@
+{{ include "chart.validateConfig" . }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "chart.fullname" . }}-pool
+  labels:
+    {{- include "chart.labels" . | nindent 4 }}
+  annotations:
+    app.kubernetes.io/name: pulumi-workflow-agent-pool
+    {{- with .Values.podAnnotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  strategy:
+    type: {{ .Values.deploymentStrategy.type }}
+    {{- if eq .Values.deploymentStrategy.type "RollingUpdate" }}
+    rollingUpdate:
+      maxSurge: {{ .Values.deploymentStrategy.rollingUpdate.maxSurge }}
+      maxUnavailable: {{ .Values.deploymentStrategy.rollingUpdate.maxUnavailable }}
+    {{- end }}
+  selector:
+    matchLabels:
+      {{- include "chart.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "chart.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "chart.serviceAccountName" . }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: agent
+          image: {{ include "chart.imageName" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          env:
+            - name: PULUMI_AGENT_DEPLOY_TARGET
+              value: {{ .Values.agent.deployTarget | quote }}
+            - name: PULUMI_AGENT_SHARED_VOLUME_DIRECTORY
+              value: {{ .Values.agent.sharedVolumeDirectory | quote }}
+            - name: PULUMI_AGENT_SERVICE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "chart.configMapName" . }}
+                  key: PULUMI_AGENT_SERVICE_URL
+            - name: PULUMI_AGENT_IMAGE
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "chart.configMapName" . }}
+                  key: PULUMI_AGENT_IMAGE
+            - name: PULUMI_AGENT_IMAGE_PULL_POLICY
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "chart.configMapName" . }}
+                  key: PULUMI_AGENT_IMAGE_PULL_POLICY
+            {{- if or .Values.agent.token .Values.agent.existingSecretName }}
+            - name: PULUMI_AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "chart.secretName" . }}
+                  key: PULUMI_AGENT_TOKEN
+            {{- end }}
+            - name: PULUMI_AGENT_SERVICE_ACCOUNT_NAME
+              value: {{ include "chart.workerServiceAccountName" . | quote }}
+            {{- if .Values.agent.numCpus }}
+            - name: PULUMI_AGENT_NUM_CPUS
+              value: {{ .Values.agent.numCpus | quote }}
+            {{- end }}
+            {{- if .Values.agent.memQuantity }}
+            - name: PULUMI_AGENT_MEM_QUANTITY
+              value: {{ .Values.agent.memQuantity | quote }}
+            {{- end }}
+            {{- with .Values.agent.extraEnvVars }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          {{- end }}
+          volumeMounts:
+            - name: agent-work
+              mountPath: /mnt/work
+            - name: agent-config
+              mountPath: /mnt/worker-pod.json
+              subPath: worker-pod.json
+              readOnly: true
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+        {{- with .Values.sidecars }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: agent-work
+          emptyDir: {}
+        - name: agent-config
+          configMap:
+            name: {{ include "chart.configMapName" . }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
