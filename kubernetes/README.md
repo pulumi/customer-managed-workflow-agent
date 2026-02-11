@@ -338,6 +338,39 @@ const pod: V1Pod = {
 };
 ```
 
+### Example Pod Specification for Non-Root User
+
+Here's an example that allows the workflow container to run as a non-root user
+in case your org has strict policies against root user usage. 
+
+```typescript
+import { V1Pod } from "@kubernetes/client-node";
+
+const pod: V1Pod = {
+    spec: {
+        // example security context that runs containers as non-root users
+        securityContext: {
+            runAsNonRoot: true,
+            runAsUser: 1000,
+        },
+        // some container customization is needed to avoid utilizing the "/" directory
+        containers: [
+            {
+                name: "pulumi-workflow",
+                env: [
+                    // this value is arbitray but tools depend on USER being set
+                    { name: "USER", value: "pulumi" },
+                    // npm, etc. will fallback to "/" if HOME is not set
+                    { name: "HOME", value: "/tmp" }
+                ],
+                // deployment commands will be executed in this directory
+                workingDir: "/tmp"
+            },
+        ]
+    },
+};
+```
+
 ### Loading Pod Specification into the Agent
 
 You can provide a custom pod specification to the agent in two ways:
