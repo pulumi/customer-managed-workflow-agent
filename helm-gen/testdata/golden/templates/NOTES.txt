@@ -1,0 +1,31 @@
+Thank you for installing {{ .Chart.Name }}.
+
+Your release is named {{ .Release.Name }}.
+
+To check the status of the deployment:
+
+  kubectl get deployments -n {{ .Release.Namespace }} -l "app.kubernetes.io/instance={{ .Release.Name }}"
+
+To check the agent pods:
+
+  kubectl get pods -n {{ .Release.Namespace }} -l "app.kubernetes.io/instance={{ .Release.Name }}"
+
+To view agent logs:
+
+  kubectl logs -n {{ .Release.Namespace }} -l "app.kubernetes.io/name=customer-managed-workflow-agent" -f
+
+{{- if not .Values.agent.token }}
+{{- if not .Values.agent.existingSecretName }}
+
+WARNING: No agent token is configured. Set agent.token or agent.existingSecretName in your values.
+{{- end }}
+{{- end }}
+
+{{- if .Values.workerServiceAccount.create }}
+
+A worker ServiceAccount ({{ include "chart.workerServiceAccountName" . }}) has been created for worker pods.
+To use cloud IAM (e.g., AWS IRSA), add annotations via workerServiceAccount.annotations.
+{{- end }}
+
+For more information, visit:
+  https://github.com/pulumi/customer-managed-workflow-agent

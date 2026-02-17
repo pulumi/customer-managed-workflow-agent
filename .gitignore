@@ -3,3 +3,6 @@ workflow-runner-embeddable
 kubernetes/Pulumi.review_stacks.yaml
 kubernetes/Pulumi.dev.yaml
 /.idea
+bin/
+helm-chart/
+kubernetes/rendered-manifests/

@@ -3,6 +3,16 @@
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
+- [Helm Chart Installation](#helm-chart-installation)
+  - [Quick Start](#helm-quick-start)
+  - [Using an Existing Secret](#using-an-existing-secret)
+  - [Air-Gapped / Private Registry](#air-gapped--private-registry)
+  - [Worker Service Account](#worker-service-account)
+  - [Health Probes](#health-probes)
+  - [Deployment Strategy](#deployment-strategy)
+  - [Prometheus ServiceMonitor](#prometheus-servicemonitor)
+  - [RBAC](#rbac)
+  - [Helm Values Reference](#helm-values-reference)
 - [Monitoring and Metrics](#monitoring-and-metrics)
   - [Basic Health Monitoring](#basic-health-monitoring)
   - [Prometheus Integration](#prometheus-integration)
@@ -56,6 +66,200 @@ Optionally you can set an `agentImagePullPolicy` to a
 [Kubernetes supported value][k8s-pull-policy], which defaults to `Always`.
 
 [k8s-pull-policy]: https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy
+
+## Helm Chart Installation
+
+As an alternative to the Pulumi-based deployment above, you can install the
+agent using a Helm chart. This is useful if your team already uses Helm for
+Kubernetes deployments or if you prefer a standard `helm install` workflow.
+
+The Helm chart is generated from the same Kubernetes manifests used by the
+Pulumi component, so both methods produce equivalent resources.
+
+### Helm Quick Start
+
+```bash
+helm install pulumi-agent ./helm-chart/pulumi-deployment-agent \
+  --namespace pulumi-agent --create-namespace \
+  --set agent.token=<your-pulumi-agent-token>
+```
+
+The chart requires either `agent.token` or `agent.existingSecretName` to be
+set. If neither is provided, `helm install` will fail with a clear validation
+error.
+
+### Using an Existing Secret
+
+If you manage secrets externally (e.g., Sealed Secrets, External Secrets
+Operator), you can reference a pre-existing Kubernetes Secret instead of
+passing a token directly:
+
+```bash
+helm install pulumi-agent ./helm-chart/pulumi-deployment-agent \
+  --namespace pulumi-agent --create-namespace \
+  --set agent.existingSecretName=my-agent-secret
+```
+
+The Secret must contain a `PULUMI_AGENT_TOKEN` key.
+
+### Air-Gapped / Private Registry
+
+For environments that cannot pull from Docker Hub, set `image.registry` to your
+private registry:
+
+```bash
+helm install pulumi-agent ./helm-chart/pulumi-deployment-agent \
+  --namespace pulumi-agent --create-namespace \
+  --set agent.token=<token> \
+  --set image.registry=my-registry.example.com
+```
+
+This produces an image reference like
+`my-registry.example.com/pulumi/customer-managed-workflow-agent:<version>`.
+
+### Worker Service Account
+
+The chart creates a dedicated ServiceAccount for worker pods
+(`workerServiceAccount`). This is separate from the main agent ServiceAccount
+and is used by pods that the agent spawns to run Pulumi operations.
+
+To annotate the worker SA for cloud IAM integration (e.g., AWS IRSA or GCP
+Workload Identity):
+
+```bash
+helm install pulumi-agent ./helm-chart/pulumi-deployment-agent \
+  --namespace pulumi-agent --create-namespace \
+  --set agent.token=<token> \
+  --set workerServiceAccount.annotations."eks\.amazonaws\.com/role-arn"=arn:aws:iam::123456789012:role/my-role
+```
+
+To disable the worker ServiceAccount (if you manage it externally):
+
+```bash
+--set workerServiceAccount.create=false \
+--set workerServiceAccount.name=my-existing-sa
+```
+
+### Health Probes
+
+The agent exposes a `/healthz` endpoint on port 8080. The chart supports both
+liveness and readiness probes, both disabled by default:
+
+```bash
+# Enable readiness probe for safe rolling updates
+--set readinessProbe.enabled=true
+
+# Enable liveness probe for automatic restart of unhealthy pods
+--set livenessProbe.enabled=true
+```
+
+### Deployment Strategy
+
+The default strategy is `RollingUpdate` with 25% maxSurge and 25%
+maxUnavailable. To switch to `Recreate` (stops all old pods before creating
+new ones):
+
+```bash
+--set deploymentStrategy.type=Recreate
+```
+
+To customize rolling update parameters:
+
+```bash
+--set deploymentStrategy.rollingUpdate.maxSurge=1 \
+--set deploymentStrategy.rollingUpdate.maxUnavailable=0
+```
+
+### Prometheus ServiceMonitor
+
+If you use the [Prometheus Operator][prom-operator], enable the ServiceMonitor
+to automatically scrape the agent's health endpoint:
+
+```bash
+--set serviceMonitor.enabled=true
+```
+
+[prom-operator]: https://github.com/prometheus-operator/prometheus-operator
+
+### RBAC
+
+The chart creates a Role and RoleBinding that grant the agent permissions to
+manage pods, pod logs, and configmaps in its namespace. These are required for
+the agent to spawn and monitor worker pods.
+
+To disable RBAC resource creation (if you manage RBAC externally):
+
+```bash
+--set rbac.create=false
+```
+
+### Helm Values Reference
+
+| Parameter | Description | Default |
+|---|---|---|
+| `replicaCount` | Number of agent pod replicas | `1` |
+| **Image** | | |
+| `image.registry` | Container registry prefix | `""` |
+| `image.repository` | Agent image repository | `pulumi/customer-managed-workflow-agent` |
+| `image.pullPolicy` | Image pull policy | `IfNotPresent` |
+| `image.tag` | Image tag (defaults to chart `appVersion`) | `""` |
+| `imagePullSecrets` | Docker registry pull secrets | `[]` |
+| **Agent** | | |
+| `agent.serviceUrl` | Pulumi Cloud API URL | `"https://api.pulumi.com"` |
+| `agent.token` | Agent access token | `""` |
+| `agent.existingSecretName` | Use pre-existing Secret | `""` |
+| `agent.deployTarget` | Deployment target type | `"kubernetes"` |
+| `agent.sharedVolumeDirectory` | Shared volume mount path | `"/mnt/work"` |
+| `agent.numCpus` | CPU request for worker pods (Fargate) | `""` |
+| `agent.memQuantity` | Memory request for worker pods (Fargate) | `""` |
+| `agent.extraEnvVars` | Extra environment variables for the agent | `[]` |
+| **Naming** | | |
+| `nameOverride` | Override the chart name | `""` |
+| `fullnameOverride` | Override the full release name | `""` |
+| **Worker Service Account** | | |
+| `workerServiceAccount.create` | Create worker pod SA | `true` |
+| `workerServiceAccount.annotations` | Worker SA annotations | `{}` |
+| `workerServiceAccount.name` | Override worker SA name | `""` |
+| **Service Account** | | |
+| `serviceAccount.create` | Create the agent ServiceAccount | `true` |
+| `serviceAccount.annotations` | Annotations for the agent SA | `{}` |
+| `serviceAccount.name` | Override agent SA name | `""` |
+| **RBAC** | | |
+| `rbac.create` | Create Role and RoleBinding | `true` |
+| **Pod Template** | | |
+| `podTemplate.workerPod` | JSON string of worker pod spec overrides | `"{}"` |
+| **Service** | | |
+| `service.type` | Kubernetes Service type | `ClusterIP` |
+| `service.port` | Service port | `8080` |
+| `service.prometheus.scrape` | Enable Prometheus scrape annotation | `"true"` |
+| `service.prometheus.path` | Prometheus scrape path | `/healthz` |
+| **ServiceMonitor** | | |
+| `serviceMonitor.enabled` | Create a Prometheus ServiceMonitor | `false` |
+| `serviceMonitor.interval` | Scrape interval | `"30s"` |
+| `serviceMonitor.path` | Scrape path | `/healthz` |
+| **Probes** | | |
+| `livenessProbe.enabled` | Enable liveness probe | `false` |
+| `livenessProbe.initialDelaySeconds` | Delay before first check | `30` |
+| `livenessProbe.periodSeconds` | Interval between liveness checks | `10` |
+| `readinessProbe.enabled` | Enable readiness probe | `false` |
+| `readinessProbe.initialDelaySeconds` | Delay before first check | `5` |
+| `readinessProbe.periodSeconds` | Interval between readiness checks | `10` |
+| **Scheduling** | | |
+| `podSecurityContext` | Pod-level security context | `{}` |
+| `securityContext` | Container-level security context | `{}` |
+| `resources` | CPU/memory resource requests and limits | `{}` |
+| `nodeSelector` | Node selector constraints | `{}` |
+| `tolerations` | Pod tolerations | `[]` |
+| `affinity` | Pod affinity rules | `{}` |
+| **Other** | | |
+| `initContainers` | Init containers for the agent pod | `[]` |
+| `sidecars` | Sidecar containers for the agent pod | `[]` |
+| `podAnnotations` | Annotations added to agent pods | `{}` |
+| `podLabels` | Labels added to agent pods | `{}` |
+| `deploymentStrategy.type` | `RollingUpdate` or `Recreate` | `RollingUpdate` |
+| `deploymentStrategy.rollingUpdate.maxSurge` | Max extra pods during update | `"25%"` |
+| `deploymentStrategy.rollingUpdate.maxUnavailable` | Max unavailable during update | `"25%"` |
+| `terminationGracePeriodSeconds` | Grace period before pod termination | `300` |
 
 ## Monitoring and Metrics
 
