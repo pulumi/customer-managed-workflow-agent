@@ -15,6 +15,7 @@ export interface PulumiSelfHostedAgentComponentArgs {
     agentMemQuantity?: number;
     podTemplate?: V1Pod;
     enableServiceMonitor?: boolean;
+    caCertificateSecretName?: string;
 }
 
 export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
@@ -216,7 +217,13 @@ export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
                                         mountPath: "/mnt/worker-pod.json",
                                         subPath: "worker-pod.json",
                                         readOnly: true,
-                                    }
+                                    },
+                                    ...(args.caCertificateSecretName ? [{
+                                        name: "ca-certificates",
+                                        mountPath: "/etc/ssl/certs/ca-certificates.crt",
+                                        subPath: "ca-certificates.crt",
+                                        readOnly: true,
+                                    }] : []),
                                 ],
                             },
                         ],
@@ -231,6 +238,13 @@ export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
                                     name: agentConfig.metadata.name,
                                 }
                             },
+                            ...(args.caCertificateSecretName ? [{
+                                name: "ca-certificates",
+                                secret: {
+                                    secretName: args.caCertificateSecretName,
+                                    defaultMode: 420,
+                                },
+                            }] : []),
                         ],
                     },
                 },
