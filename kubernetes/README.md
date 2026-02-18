@@ -8,6 +8,10 @@
   - [Prometheus Integration](#prometheus-integration)
   - [Manual Prometheus Configuration](#manual-prometheus-configuration)
 - [workerServiceAccount](#workerserviceaccount)
+- [Custom CA Certificates](#custom-ca-certificates)
+  - [Creating the CA Certificate Secret](#creating-the-ca-certificate-secret)
+  - [Configuring the Agent Pod](#configuring-the-agent-pod)
+  - [Configuring Worker Pods](#configuring-worker-pods)
 - [Generating Static YAML Manifests](#generating-static-yaml-manifests)
   - [Usage](#usage)
   - [Applying Rendered Manifests](#applying-rendered-manifests)
@@ -118,6 +122,90 @@ configured to support cloud service accounts.
 
 To generate static YAML manifests instead of deploying directly, see the
 [Generating Static YAML Manifests](#generating-static-yaml-manifests) section.
+
+## Custom CA Certificates
+
+If your environment uses a corporate proxy, internal PKI, or self-signed
+certificates, both the agent and worker pods need to trust your custom root CA
+certificates. The agent runs on Alpine Linux, where the system CA store is
+located at `/etc/ssl/certs/ca-certificates.crt`. Mounting a custom CA bundle
+at that path overrides the system trust store.
+
+### Creating the CA Certificate Secret
+
+Create a Kubernetes secret containing your CA certificate bundle. The secret
+key **must** be `ca-certificates.crt`.
+
+```bash
+# From a single PEM file
+kubectl create secret generic ca-certificates \
+  --namespace <agent-namespace> \
+  --from-file=ca-certificates.crt=/path/to/your/ca-bundle.crt
+```
+
+**Important:** If you only include your custom CA, the entire system trust
+store is replaced. This means the agent and worker pods will no longer trust
+public CAs (e.g., for `api.pulumi.com` or `github.com`). Combine your custom
+CA with the system CAs:
+
+```bash
+# Extract system CAs from a running agent pod
+kubectl exec -n <namespace> <agent-pod> -- \
+  cat /etc/ssl/certs/ca-certificates.crt > system-cas.crt
+
+# Combine system CAs with your custom CA
+cat system-cas.crt your-custom-ca.crt > combined-ca-bundle.crt
+
+# Create the secret with the combined bundle
+kubectl create secret generic ca-certificates \
+  --namespace <agent-namespace> \
+  --from-file=ca-certificates.crt=combined-ca-bundle.crt
+```
+
+See [`ca-secret.yaml`](./ca-secret.yaml) for a YAML template.
+
+The secret **must exist before** deploying the agent. If the secret is
+referenced but missing, pods will fail to start with volume mount errors.
+
+### Configuring the Agent Pod
+
+Set the `caCertificateSecretName` config value to mount the CA certificate
+secret into the agent deployment:
+
+```bash
+pulumi config set caCertificateSecretName ca-certificates
+```
+
+This adds a volume mount at `/etc/ssl/certs/ca-certificates.crt` in the agent
+container. The Go agent uses the default system CA store, so no additional
+environment variables are needed.
+
+### Configuring Worker Pods
+
+Worker pods are configured separately via the pod template (strategic merge
+patch). Add the CA certificate volume and volume mount to your pod
+specification:
+
+```yaml
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+    - name: pulumi-workflow
+      volumeMounts:
+        - name: ca-certificates
+          mountPath: /etc/ssl/certs/ca-certificates.crt
+          subPath: ca-certificates.crt
+          readOnly: true
+  volumes:
+    - name: ca-certificates
+      secret:
+        secretName: ca-certificates
+        defaultMode: 420
+```
+
+See [`examples/pod.yaml`](./examples/pod.yaml) for a complete example. Both
+the agent and worker pods can reference the same secret.
 
 ## Generating Static YAML Manifests
 

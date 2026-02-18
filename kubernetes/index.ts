@@ -52,6 +52,7 @@ const agent = new PulumiSelfHostedAgentComponent(
         workerServiceAccount,
         enableServiceMonitor:
             pulumiConfig.getBoolean("enableServiceMonitor") || false,
+        caCertificateSecretName: pulumiConfig.get("caCertificateSecretName"),
     },
     agentOpts,
 );

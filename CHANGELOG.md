@@ -1,7 +1,10 @@
-CHANGELOG
-=========
+# CHANGELOG
 
 ## Unreleased
+
+* Adding in SSL CA Cert configuration
+
+## Released
 
 2.1.1 (2026-02-09)
 

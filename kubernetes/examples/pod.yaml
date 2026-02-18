@@ -10,8 +10,20 @@ spec:
         - name: NEW_VARIABLE
           value: "some_value"
       volumeMounts:
-        - name: my-empty-dir 
-          mountPath: "/app/data" 
+        - name: my-empty-dir
+          mountPath: "/app/data"
+        # Mount custom CA certificates for corporate proxy or internal PKI
+        - name: ca-certificates
+          mountPath: /etc/ssl/certs/ca-certificates.crt
+          subPath: ca-certificates.crt
+          readOnly: true
   volumes:
     - name: my-empty-dir
       emptyDir: {}
+    # Secret containing the CA certificate bundle
+    # Create with: kubectl create secret generic ca-certificates \
+    #   --from-file=ca-certificates.crt=/path/to/ca-bundle.crt
+    - name: ca-certificates
+      secret:
+        secretName: ca-certificates
+        defaultMode: 420
