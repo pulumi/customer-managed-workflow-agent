@@ -2,7 +2,9 @@
 
 This repository contains the release artifacts for Customer Managed Workflow Agents.
 
-See [Deployments](https://www.pulumi.com/docs/pulumi-cloud/deployments/) for additional details about this product.
+> **Note:** Insights workflows are supported in version v2.2.0+.
+
+See [Customer-managed agents](https://www.pulumi.com/docs/deployments/deployments/customer-managed-agents/) for additional details about this product.
 
 ## Verifying release artifacts
 
@@ -36,10 +38,10 @@ sha256sum --ignore-missing -c checksums.txt
 If the checksums match the downloaded files, you will see output like this:
 
 ```bash
-customer-managed-workflow-agent_1.0.0_darwin_amd64.tar.gz: OK
-customer-managed-workflow-agent_1.0.0_darwin_arm64.tar.gz: OK
-customer-managed-workflow-agent_1.0.0_linux_amd64.tar.gz: OK
-customer-managed-workflow-agent_1.0.0_linux_arm64.tar.gz: OK
+customer-managed-workflow-agent_2.2.0_darwin_amd64.tar.gz: OK
+customer-managed-workflow-agent_2.2.0_darwin_arm64.tar.gz: OK
+customer-managed-workflow-agent_2.2.0_linux_amd64.tar.gz: OK
+customer-managed-workflow-agent_2.2.0_linux_arm64.tar.gz: OK
 ```
 
 ## Local testing
