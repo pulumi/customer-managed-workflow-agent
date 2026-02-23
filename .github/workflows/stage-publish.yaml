@@ -18,6 +18,8 @@ env:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    env:
+      GOPRIVATE: github.com/pulumi/*
     steps:
       - name: Fetch secrets from ESC
         id: esc-secrets
@@ -49,6 +51,11 @@ jobs:
         with:
           username: ${{ steps.esc-secrets.outputs.DOCKER_HUB_USERNAME }}
           password: ${{ steps.esc-secrets.outputs.DOCKER_HUB_PASSWORD }}
+      - name: Configure access to private Go modules
+        run: |
+          git config --global url."https://pulumi-bot:${GITHUB_TOKEN}@github.com/pulumi/".insteadOf "https://github.com/pulumi/"
+        env:
+          GITHUB_TOKEN: ${{ steps.esc-secrets.outputs.PULUMI_BOT_TOKEN }}
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
