@@ -87,6 +87,7 @@ dockers:
     goarch: amd64
     build_flag_templates:
       - "--platform=linux/amd64"
+      - "--build-arg=DOCKER_VERSION={{.Tag}}"
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.title={{.ProjectName}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
@@ -97,6 +98,7 @@ dockers:
     goarch: arm64
     build_flag_templates:
       - "--platform=linux/arm64"
+      - "--build-arg=DOCKER_VERSION={{.Tag}}"
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.title={{.ProjectName}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
@@ -108,6 +110,7 @@ dockers:
     goarch: amd64
     build_flag_templates:
       - "--platform=linux/amd64"
+      - "--build-arg=DOCKER_VERSION={{.Tag}}"
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.title={{.ProjectName}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
@@ -118,6 +121,7 @@ dockers:
     goarch: arm64
     build_flag_templates:
       - "--platform=linux/arm64"
+      - "--build-arg=DOCKER_VERSION={{.Tag}}"
       - "--label=org.opencontainers.image.created={{.Date}}"
       - "--label=org.opencontainers.image.title={{.ProjectName}}"
       - "--label=org.opencontainers.image.revision={{.FullCommit}}"
