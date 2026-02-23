@@ -2,9 +2,14 @@
 
 ## Unreleased
 
-* Adding in SSL CA Cert configuration
+* None
 
 ## Released
+
+2.2.0 (2026-02-23)
+
+* Adding in SSL CA Cert configuration
+* Add support for Insights workflows
 
 2.1.1 (2026-02-09)
 
