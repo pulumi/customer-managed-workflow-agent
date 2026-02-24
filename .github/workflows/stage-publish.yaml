@@ -62,4 +62,5 @@ jobs:
           args: ${{ inputs.goreleaser-args }}
           version: '~> v2'
         env:
+          GORELEASER_CURRENT_TAG: ${{ github.ref_name }}
           REPO_OWNER: pulumi
