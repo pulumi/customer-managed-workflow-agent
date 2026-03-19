@@ -5,7 +5,7 @@ export = async () => {
 
   const config = new pulumi.Config();
   const accessToken = config.requireSecret("runnerAccessToken");
-  const vpcId = config.get("vpdId");
+  const vpcId = config.get("vpcId");
   const amiPrefix = config.get("amiPrefix") || "pulumi-workflow-agent";
   const instanceType = config.get("instanceType") || "t3.small";
 

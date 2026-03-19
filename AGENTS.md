@@ -19,7 +19,8 @@ Release packaging and deployment tooling for Pulumi's customer-managed workflow 
 - `.goreleaser.yaml` -- Release config (builds, Docker images, manifests, signing)
 - `.goreleaser.prerelease.yaml` -- Prerelease config (no `latest` tags, no GitHub release)
 - `docker/` -- Alternative Dockerfile that installs from published releases (not used by GoReleaser)
-- `goreleaser/` -- GoReleaser output directory (gitignored in practice, but present locally after builds)
+- `goreleaser/` -- GoReleaser output directory (gitignored, present locally after builds)
+- `workflow-runner-embeddable` -- Binary artifact copied by GoReleaser post-hook (gitignored, present locally after builds)
 
 ## Development
 
@@ -28,6 +29,23 @@ Release packaging and deployment tooling for Pulumi's customer-managed workflow 
 ```bash
 # Initialize the pulumi-service submodule (required before any build)
 make submodules
+```
+
+### Validating TypeScript Components
+
+There are no automated tests in this repository. Before pushing changes to TypeScript components, verify they compile:
+
+```bash
+# Kubernetes native component
+cd kubernetes && yarn install && npx tsc --noEmit && cd ..
+
+# Kubernetes DinD component (legacy)
+cd kubernetes-dind && yarn install && npx tsc --noEmit && cd ..
+```
+
+The `agent-images/agent-setup/` program uses npm instead of yarn:
+```bash
+cd agent-images/agent-setup && npm install && npx tsc --noEmit && cd ..
 ```
 
 ### Local Testing with GoReleaser
@@ -87,8 +105,9 @@ The agent reads `pulumi-workflow-agent.yaml` at runtime. See `pulumi-workflow-ag
 ## Forbidden Patterns
 
 - **Never edit files inside `pulumi-service/`** -- it is a submodule. Changes go in the `pulumi/pulumi-service` repository.
-- **Never commit the `goreleaser/` directory** -- it contains build artifacts and is gitignored.
+- **Never commit the `goreleaser/` directory or `workflow-runner-embeddable` binary** -- they are build artifacts and are gitignored.
 - **Never commit secrets** (tokens, cosign private keys) -- the `cosign.key` in the repo is encrypted and requires `COSIGN_PASSWORD`.
+- **Never mix package managers** -- use yarn in `kubernetes/` and `kubernetes-dind/`, npm in `agent-images/agent-setup/`.
 
 ## Changelog
 

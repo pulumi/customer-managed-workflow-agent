@@ -50,7 +50,7 @@ You can either update the default values in the Packer template or see [the Pack
 ### Steps
 
 1. Clone this repo: `git clone https://github.com/pulumi/customer-managed-workflow-agent.git`
-1. Change to the correct sub-folder folder: `cd customer-managed-workflow-agent/packer`
+1. Change to the correct sub-folder: `cd customer-managed-workflow-agent/agent-images/packer`
 1. Run `packer init .` to initialize the setup
 1. Run `packer validate .` to ensure that the template is correct
 1. Run `packer build .` to build the AMI
