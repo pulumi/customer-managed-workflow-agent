@@ -16,6 +16,9 @@ builds:
     ldflags:
       - -s
       - -w
+      - -X github.com/pulumi/pulumi-service/cmd/customer-managed-workflow-agent/version.Version={{.Tag}}
+      - -X github.com/pulumi/pulumi-service/pkg/version.Buildstamp={{.Env.BUILD_STAMP}}
+      - -X github.com/pulumi/pulumi-service/pkg/version.GitHash={{.Env.BUILD_GIT_HASH}}
       - -extldflags '-static'
     env:
       - CGO_ENABLED=0

@@ -8,7 +8,7 @@ Release packaging and deployment tooling for Pulumi's customer-managed workflow 
 - **Kubernetes components**: TypeScript, Pulumi SDK (`@pulumi/pulumi` ^3, `@pulumi/kubernetes` ^4.14), Node.js 18+
 - **AMI building**: HashiCorp Packer, AWS EBS
 - **CI/CD**: GitHub Actions (tag-triggered releases via GoReleaser)
-- **Go version** (for building submodule binaries): 1.22
+- **Go version** (for building submodule binaries): whatever `pulumi-service/go.mod` declares; CI reads it from there
 
 ## Repository Structure
 
