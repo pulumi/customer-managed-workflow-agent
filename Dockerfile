@@ -1,4 +1,4 @@
-FROM alpine:3.20
+FROM alpine:3.24
 
 ARG DOCKER_VERSION
 ENV PATH="${PATH}:/usr/local/bin"
