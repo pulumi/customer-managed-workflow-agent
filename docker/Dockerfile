@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM alpine:3.18 as buildenv
+FROM --platform=$BUILDPLATFORM alpine:3.24 as buildenv
 
 RUN apk add curl
 
@@ -6,7 +6,7 @@ ENV HOME /home/builder
 
 RUN curl -fsSL https://raw.githubusercontent.com/pulumi/customer-managed-workflow-agent/main/install.sh | sh
 
-FROM alpine:3.18
+FROM alpine:3.24
 
 ENV PATH="${PATH}:/usr/local/bin/customer-managed-workflow-agent"
 
