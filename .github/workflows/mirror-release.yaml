@@ -23,7 +23,7 @@ on:
 permissions: {}
 
 concurrency:
-  group: mirror-release-${{ inputs.version }}
+  group: mirror-release
   cancel-in-progress: false
 
 env:
@@ -38,7 +38,6 @@ jobs:
       contents: write
     outputs:
       created: ${{ steps.create.outputs.created }}
-      promoted: ${{ steps.promote.outputs.promoted }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -188,11 +187,6 @@ jobs:
           CHECKSUMS: ${{ steps.download.outputs.checksums }}
           NOTES: ${{ steps.download.outputs.notes }}
 
-      - name: Promote the latest release
-        if: steps.create.outputs.created == 'true' && !contains(inputs.version, '-')
-        id: promote
-        run: ./scripts/promote-latest.sh "$VERSION" >> "$GITHUB_OUTPUT"
-
   # Separate from the release job so a failure here doesn't skip the docs dispatch. Re-run it on its own.
   install-from-github:
     name: Install from the GitHub release
@@ -215,13 +209,36 @@ jobs:
       - name: Install from the GitHub release and smoke-test
         run: ./scripts/smoke-test-install.sh "$VERSION" github "$RUNNER_TEMP/install-github"
 
+  # Its own job so a failure can be re-run from the original run; re-running the release job would see the release
+  # exists and skip.
+  promote:
+    name: Promote the latest release
+    needs: [release]
+    if: needs.release.outputs.created == 'true' && !contains(inputs.version, '-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      promoted: ${{ steps.promote.outputs.promoted }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Promote the highest final release to latest
+        id: promote
+        run: ./scripts/promote-latest.sh "$VERSION" >> "$GITHUB_OUTPUT"
+
   # Updates pulumi.com/customer-managed-workflow-agent/latest-version, which install.sh reads.
   # Runs only after the release exists, and only for the highest final version, so latest-version never points at a
   # missing release or moves backwards.
   docs:
     name: Dispatch docs workflow
-    needs: [release]
-    if: needs.release.outputs.promoted == 'true'
+    needs: [promote]
+    if: needs.promote.outputs.promoted == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -233,10 +250,25 @@ jobs:
       ESC_ACTION_ENVIRONMENT: github-secrets/pulumi-customer-managed-workflow-agent
       ESC_ACTION_EXPORT_ENVIRONMENT_VARIABLES: GITHUB_TOKEN=PULUMI_BOT_TOKEN
     steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # A retried or delayed docs job may run after a newer version shipped. Only the current highest is dispatched.
+      - name: Check this is still the highest final release
+        id: current
+        run: ./scripts/promote-latest.sh --check "$VERSION" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Skip a superseded version
+        if: steps.current.outputs.promoted != 'true'
+        run: echo "::notice::$VERSION is no longer the highest final release; not dispatching docs."
       - name: Fetch secrets from ESC
+        if: steps.current.outputs.promoted == 'true'
         id: esc-secrets
         uses: pulumi/esc-action@32dda43ffe7a2ab21e6bce11c781b44a3e5623cf # v3.2.0
       - name: Install pulumictl
+        if: steps.current.outputs.promoted == 'true'
         uses: jaxxstorm/action-install-gh-release@d919e59165dbc3d515e32d2bb529eca66209fc18 # v1.7.1
         env:
           GITHUB_TOKEN: ${{ steps.esc-secrets.outputs.PULUMI_BOT_TOKEN }}
@@ -244,4 +276,5 @@ jobs:
           repo: pulumi/pulumictl
           tag: v0.0.45
       - name: Repository dispatch
+        if: steps.current.outputs.promoted == 'true'
         run: pulumictl create cli-docs-build "$VERSION" --event-type "customer-managed-workflow-agent"

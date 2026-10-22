@@ -18,7 +18,7 @@ STUB
 
 run_promote() {
   GITHUB_REPOSITORY=pulumi/customer-managed-workflow-agent PATH="$CASE/bin:$PATH" \
-    "$REPO_ROOT/scripts/promote-latest.sh" "$1" >"$CASE/out" 2>"$CASE/err"
+    "$REPO_ROOT/scripts/promote-latest.sh" "$@" >"$CASE/out" 2>"$CASE/err"
   RC=$?
 }
 
@@ -58,6 +58,25 @@ if grep -q -- "--exclude-pre-releases" "$CASE/gh.log" && grep -q -- "--exclude-d
   pass "lists only published final releases"
 else
   fail "lists only published final releases" "$(cat "$CASE/gh.log")"
+fi
+
+# The docs job rechecks with --check before dispatching, so a retried or delayed job for a superseded version skips.
+new_case
+stub_gh v2.4.0 v2.5.0
+run_promote --check v2.4.0
+if [ $RC -eq 0 ] && [ "$(cat "$CASE/out")" = "promoted=false" ] && ! grep -q "release edit" "$CASE/gh.log"; then
+  pass "--check reports a superseded version without changing latest"
+else
+  fail "--check reports a superseded version without changing latest" "rc=$RC" "out=$(cat "$CASE/out")" "$(cat "$CASE/gh.log")"
+fi
+
+new_case
+stub_gh v2.4.0 v2.5.0
+run_promote --check v2.5.0
+if [ $RC -eq 0 ] && [ "$(cat "$CASE/out")" = "promoted=true" ] && ! grep -q "release edit" "$CASE/gh.log"; then
+  pass "--check confirms the highest version without changing latest"
+else
+  fail "--check confirms the highest version without changing latest" "rc=$RC" "out=$(cat "$CASE/out")" "$(cat "$CASE/gh.log")"
 fi
 
 finish

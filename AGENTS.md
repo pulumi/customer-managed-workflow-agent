@@ -20,9 +20,9 @@ Changes to `install.sh` or `scripts/` should come with a test in `tests/`.
 ## Key Constraints
 
 - `install.sh` and its download URLs (`github.com/.../releases/download/vX.Y.Z/customer-managed-workflow-agent-vX.Y.Z-<os>-<x64|arm64>.tar.gz`) are used by the Pulumi Cloud console and the AMI. Keep archive names and the release layout stable.
-- The GitHub release is the "shipped" marker for the release pipeline. Dispatching `mirror-release.yaml` for an existing release is a no-op, including the docs dispatch. If the docs job fails, re-run it from the original workflow run.
+- The GitHub release is the "shipped" marker for the release pipeline. Dispatching `mirror-release.yaml` for an existing release is a no-op, including promotion and the docs dispatch. If the promote or docs job fails, re-run that job from the original workflow run.
 - On the release, the checksums file is renamed to `checksums.txt` / `checksums.txt.sig`.
-- Only the highest final version is marked latest and dispatched to docs (`scripts/promote-latest.sh`), so mirroring an older version never moves `latest-version` backwards.
+- Only the highest final version is marked latest and dispatched to docs (`scripts/promote-latest.sh`; the docs job rechecks with `--check`), so mirroring or retrying an older version never moves `latest-version` backwards. Runs are serialized across versions.
 - Releases after v2.3.0 are signed keyless; v2.3.0 and earlier were signed with a key and verify with `cosign.pub`.
 - Images are published under two names: `pulumi/customer-managed-workflow-agent` and the pre-v2.0.0 `pulumi/customer-managed-deployment-agent`.
 - Agent code and its changelog live with the agent source. `CHANGELOG.md` here is history through v2.3.0.

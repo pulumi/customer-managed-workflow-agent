@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 # Mark the highest final (non-prerelease) release as GitHub's latest, and report whether that is <vX.Y.Z>.
 #
-# Usage: promote-latest.sh <vX.Y.Z>     (prints promoted=true|false on stdout; GITHUB_REPOSITORY must be set)
+# Usage: promote-latest.sh [--check] <vX.Y.Z>     (prints promoted=true|false on stdout; GITHUB_REPOSITORY must be set)
 #
 # It always promotes the highest version rather than the one just created, so mirror runs that finish out of order
-# converge on the same answer, and an older version never becomes latest.
+# converge on the same answer, and an older version never becomes latest. With --check it changes nothing and only
+# reports whether <vX.Y.Z> is still the highest.
 set -euo pipefail
 
+CHECK=""
+if [[ ${1:-} == --check ]]; then
+  CHECK=true
+  shift
+fi
 if [[ $# -ne 1 ]]; then
-  echo "usage: $0 <vX.Y.Z>" >&2
+  echo "usage: $0 [--check] <vX.Y.Z>" >&2
   exit 2
 fi
 
@@ -22,8 +28,10 @@ if [[ -z $highest ]]; then
   exit 1
 fi
 
-gh release edit "$highest" --repo "$REPO" --latest >/dev/null
-echo "Latest release: $highest" >&2
+if [[ -z $CHECK ]]; then
+  gh release edit "$highest" --repo "$REPO" --latest >/dev/null
+fi
+echo "Highest final release: $highest" >&2
 
 if [[ $highest == "$VERSION" ]]; then
   echo "promoted=true"
