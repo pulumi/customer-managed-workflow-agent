@@ -99,6 +99,22 @@ else
 fi
 
 new_case
+run_install --version 2.4.0 --source ""
+if [ $RC -ne 0 ] && grep -q -- "--source requires a value" "$CASE/out" && [ ! -s "$CASE/curl.log" ]; then
+  pass "rejects an empty --source before downloading"
+else
+  fail "rejects an empty --source before downloading" "rc=$RC" "$(cat "$CASE/out")"
+fi
+
+new_case
+run_install --version 2.4.0 --source
+if [ $RC -ne 0 ] && grep -q -- "--source requires a value" "$CASE/out" && [ ! -s "$CASE/curl.log" ]; then
+  pass "rejects --source without a value before downloading"
+else
+  fail "rejects --source without a value before downloading" "rc=$RC" "$(cat "$CASE/out")"
+fi
+
+new_case
 publish 2.4.0 github
 run_install --version 2.4.0 --verify-signature
 if [ $RC -eq 0 ] && grep -q -- "--bundle .*checksums.txt.sig" "$CASE/cosign.log" &&

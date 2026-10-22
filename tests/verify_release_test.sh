@@ -67,6 +67,11 @@ expect_reject "rejects an extra checksums entry"
 
 new_case
 make_release
+sed "s/^[0-9a-f]*  \(.*darwin-arm64.tar.gz\)$/invalid-digest  \1/" "$RELEASE/$CHECKSUMS" >"$CASE/c" && mv "$CASE/c" "$RELEASE/$CHECKSUMS"
+expect_reject "rejects a malformed checksum line"
+
+new_case
+make_release
 echo tampered >>"$RELEASE/customer-managed-workflow-agent-${VERSION}-linux-x64.tar.gz"
 expect_reject "rejects a corrupted archive"
 

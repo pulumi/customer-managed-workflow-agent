@@ -38,6 +38,7 @@ jobs:
       contents: write
     outputs:
       created: ${{ steps.create.outputs.created }}
+      promoted: ${{ steps.promote.outputs.promoted }}
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -78,8 +79,11 @@ jobs:
             cat "$RUNNER_TEMP/gh-err.txt" >&2
             exit 1
           fi
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" --silent 2>/dev/null; then
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" --silent 2>"$RUNNER_TEMP/gh-err.txt"; then
             echo "::error::Tag $VERSION exists without a release. Check it by hand before rerunning."
+            exit 1
+          elif ! grep -q "HTTP 404" "$RUNNER_TEMP/gh-err.txt"; then
+            cat "$RUNNER_TEMP/gh-err.txt" >&2
             exit 1
           fi
           echo "exists=false" >> "$GITHUB_OUTPUT"
@@ -164,9 +168,10 @@ jobs:
           # Cosign bundles don't depend on file names.
           mv "$CHECKSUMS" checksums.txt
           mv "$CHECKSUMS.sig" checksums.txt.sig
-          flags=(--latest)
+          # Latest is set by the next step, which only ever promotes the highest final version.
+          flags=(--latest=false)
           if [[ $VERSION == *-* ]]; then
-            flags=(--prerelease --latest=false)
+            flags+=(--prerelease)
           fi
           gh release create "$VERSION" \
             --repo "$GITHUB_REPOSITORY" \
@@ -182,6 +187,11 @@ jobs:
           DIR: ${{ steps.download.outputs.dir }}
           CHECKSUMS: ${{ steps.download.outputs.checksums }}
           NOTES: ${{ steps.download.outputs.notes }}
+
+      - name: Promote the latest release
+        if: steps.create.outputs.created == 'true' && !contains(inputs.version, '-')
+        id: promote
+        run: ./scripts/promote-latest.sh "$VERSION" >> "$GITHUB_OUTPUT"
 
   # Separate from the release job so a failure here doesn't skip the docs dispatch. Re-run it on its own.
   install-from-github:
@@ -206,11 +216,12 @@ jobs:
         run: ./scripts/smoke-test-install.sh "$VERSION" github "$RUNNER_TEMP/install-github"
 
   # Updates pulumi.com/customer-managed-workflow-agent/latest-version, which install.sh reads.
-  # Runs only after the release exists, so latest-version never points at a missing release.
+  # Runs only after the release exists, and only for the highest final version, so latest-version never points at a
+  # missing release or moves backwards.
   docs:
     name: Dispatch docs workflow
     needs: [release]
-    if: needs.release.outputs.created == 'true' && !contains(inputs.version, '-')
+    if: needs.release.outputs.promoted == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read

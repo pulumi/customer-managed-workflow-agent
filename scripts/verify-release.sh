@@ -50,6 +50,6 @@ done
 # sha256sum -c only checks the files it lists, so also require the list to be exactly the four archives.
 echo "--- checking ${CHECKSUMS} lists exactly the expected archives"
 diff <(printf '%s\n' "${ARCHIVES[@]}" | sort) <(awk '{ sub(/^\*/, "", $2); print $2 }' "$CHECKSUMS" | sort)
-sha256sum -c "$CHECKSUMS"
+sha256sum --strict -c "$CHECKSUMS"
 
 echo "Verified ${VERSION}"

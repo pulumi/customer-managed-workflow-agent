@@ -85,6 +85,10 @@ while [ $# -gt 0 ]; do
             VERIFY_SIGNATURE="true"
             ;;
         --source)
+            if [ -z "$2" ]; then
+                >&2 say_red "error: --source requires a value: github or cdn"
+                exit 1
+            fi
             SOURCE=$2
             ;;
      esac
