@@ -8,7 +8,5 @@
 
 ## Checklist
 
-- [ ] TypeScript components compile (`npx tsc --noEmit` in affected directories)
-- [ ] `CHANGELOG.md` updated (if this is a user-facing change)
-- [ ] No files inside `pulumi-service/` were modified
+- [ ] Tests added or updated for changes to `install.sh` or `scripts/`
 - [ ] No secrets or build artifacts included

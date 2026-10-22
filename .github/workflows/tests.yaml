@@ -1,0 +1,100 @@
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: actionlint
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/v1.7.12/scripts/download-actionlint.bash) 1.7.12
+          ./actionlint -color
+      - name: shellcheck
+        run: shellcheck install.sh scripts/*.sh tests/*.sh
+
+  scripts:
+    name: Script tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu, macos]
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run tests
+        run: |
+          if [[ $RUNNER_OS == Linux ]]; then
+            tests/run.sh
+          else
+            # verify-release.sh only runs in the mirror workflow, on Linux.
+            tests/run.sh install_test.sh smoke_test_install_test.sh
+          fi
+
+  install:
+    name: Install the latest release (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu, macos]
+    runs-on: ${{ matrix.os }}-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Run install script
+        run: ./install.sh --silent
+      - name: Check installed content
+        run: |
+          cd ~/.pulumi/bin/customer-managed-workflow-agent
+          for f in customer-managed-workflow-agent workflow-runner workflow-runner-embeddable; do
+            test -s "$f" -a -x "$f" || { echo "missing or not executable: $f"; ls -al; exit 1; }
+          done
+          ./customer-managed-workflow-agent --version
+
+  typescript:
+    name: TypeScript (${{ matrix.dir }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - dir: kubernetes
+            install: yarn install --frozen-lockfile
+          - dir: kubernetes-dind
+            install: yarn install --frozen-lockfile
+          - dir: agent-images/agent-setup
+            install: npm ci
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ matrix.dir }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: ${{ matrix.install }}
+      - name: Typecheck
+        # Only kubernetes/ declares typescript; the others use the same version.
+        run: npx --yes -p typescript@5.9.3 tsc --noEmit

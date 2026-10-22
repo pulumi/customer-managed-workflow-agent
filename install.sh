@@ -47,20 +47,27 @@ say_white()
 
 at_exit()
 {
-    # shellcheck disable=SC2181
-    # https://github.com/koalaman/shellcheck/wiki/SC2181
-    # Disable because we don't actually know the command we're running
-    if [ "$?" -ne 0 ]; then
+    EXIT_CODE=$?
+    # Remove this run's temporary files whether or not the install succeeded.
+    rm -f "${TARBALL_DEST}"
+    rm -rf "${VERIFY_DIR}" "${EXTRACT_DIR}"
+    if [ "${EXIT_CODE}" -ne 0 ]; then
         >&2 say_red
         >&2 say_red "We're sorry, but it looks like something might have gone wrong during installation."
         >&2 say_red "If you need help, please join us on https://slack.pulumi.com/"
     fi
 }
 
+TARBALL_DEST=""
+VERIFY_DIR=""
+EXTRACT_DIR=""
 trap at_exit EXIT
 
 VERSION=""
 SILENT=""
+SKIP_CHECKSUM=""
+VERIFY_SIGNATURE=""
+SOURCE=""
 while [ $# -gt 0 ]; do
     case "$1" in
         --version)
@@ -71,9 +78,37 @@ while [ $# -gt 0 ]; do
         --silent)
             SILENT="--silent"
             ;;
+        --skip-checksum)
+            SKIP_CHECKSUM="true"
+            ;;
+        --verify-signature)
+            VERIFY_SIGNATURE="true"
+            ;;
+        --source)
+            SOURCE=$2
+            ;;
      esac
      shift
 done
+
+case "${SOURCE}" in
+    ""|github|cdn) ;;
+    *)
+        >&2 say_red "error: --source must be github or cdn, got '${SOURCE}'"
+        exit 1
+        ;;
+esac
+
+if [ -n "${VERIFY_SIGNATURE}" ]; then
+    if [ -n "${SKIP_CHECKSUM}" ]; then
+        >&2 say_red "error: --verify-signature verifies the checksums file, so it can't be combined with --skip-checksum"
+        exit 1
+    fi
+    if ! command -v cosign >/dev/null; then
+        >&2 say_red "error: --verify-signature requires cosign on your \$PATH: https://docs.sigstore.dev/cosign/system_config/installation/"
+        exit 1
+    fi
+fi
 
 if [ -z "${VERSION}" ]; then
     # Query pulumi.com/customer-managed-workflow-agent/latest-version for the most recent release. Because this approach
@@ -110,7 +145,20 @@ case $(uname -m) in
 esac
 
 TARBALL_URL="https://github.com/pulumi/customer-managed-workflow-agent/releases/download/v${VERSION}/"
+TARBALL_URL_FALLBACK="https://get.pulumi.com/releases/customer-managed-workflow-agent/"
 TARBALL_PATH=customer-managed-workflow-agent-v${VERSION}-${OS}-${ARCH}.tar.gz
+
+# Releases after v2.3.0 are signed keyless; earlier ones were signed with cosign.pub (see README.md).
+if [ -n "${VERIFY_SIGNATURE}" ]; then
+    MAJOR=$(echo "${VERSION}" | cut -d. -f1)
+    MINOR=$(echo "${VERSION}" | cut -d. -f2)
+    PATCH=$(echo "${VERSION}" | cut -d. -f3 | sed 's/[^0-9].*//')
+    if [ "${MAJOR}" -lt 2 ] || { [ "${MAJOR}" -eq 2 ] && { [ "${MINOR}" -lt 3 ] || { [ "${MINOR}" -eq 3 ] && [ "${PATCH}" -eq 0 ]; }; }; }; then
+        >&2 say_red "error: --verify-signature supports releases after v2.3.0. Verify v${VERSION} with cosign.pub as described in"
+        >&2 say_red "       https://github.com/pulumi/customer-managed-workflow-agent/blob/main/README.md"
+        exit 1
+    fi
+fi
 
 if ! command -v customer-managed-workflow-agent >/dev/null; then
     say_blue "=== Installing Customer Managed Workflow Agent v${VERSION} ==="
@@ -120,25 +168,92 @@ fi
 
 TARBALL_DEST=$(mktemp -t cmda.tar.gz.XXXXXXXXXX)
 
-download_tarball() {
+download_from_github() {
     say_white "+ Downloading ${TARBALL_URL}${TARBALL_PATH}..."
     # This should opportunistically use the GITHUB_TOKEN to avoid rate limiting
     # ...I think. It's hard to test accurately. But it at least doesn't seem to hurt.
-    if ! curl --fail ${SILENT} -L \
+    curl --fail ${SILENT} -L \
         --header "Authorization: Bearer $GITHUB_TOKEN" \
-        -o "${TARBALL_DEST}" "${TARBALL_URL}${TARBALL_PATH}"; then
+        -o "${TARBALL_DEST}" "${TARBALL_URL}${TARBALL_PATH}" || return 1
+    CHECKSUMS_URL="${TARBALL_URL}checksums.txt"
+}
+
+download_from_cdn() {
+    say_white "+ Downloading ${TARBALL_URL_FALLBACK}${TARBALL_PATH}..."
+    curl --retry 2 --fail ${SILENT} -L -o "${TARBALL_DEST}" "${TARBALL_URL_FALLBACK}${TARBALL_PATH}" || return 1
+    CHECKSUMS_URL="${TARBALL_URL_FALLBACK}customer-managed-workflow-agent-${VERSION}-checksums.txt"
+}
+
+download_tarball() {
+    case "${SOURCE}" in
+        github) download_from_github ;;
+        cdn) download_from_cdn ;;
+        *)
+            # Try to download from github first, then fallback to get.pulumi.com
+            if ! download_from_github; then
+                say_white "+ Error encountered, falling back to get.pulumi.com..."
+                download_from_cdn
+            fi
+            ;;
+    esac
+}
+
+verify_tarball() {
+    VERIFY_DIR=$(mktemp -dt cmda.verify.XXXXXXXXXX)
+    say_white "+ Downloading ${CHECKSUMS_URL}..."
+    if ! curl --retry 2 --fail ${SILENT} -L -o "${VERIFY_DIR}/checksums.txt" "${CHECKSUMS_URL}"; then
+        >&2 say_red "error: failed to download ${CHECKSUMS_URL}"
+        return 1
+    fi
+
+    if [ -n "${VERIFY_SIGNATURE}" ]; then
+        say_white "+ Verifying the signature of the checksums file..."
+        if ! curl --retry 2 --fail ${SILENT} -L -o "${VERIFY_DIR}/checksums.txt.sig" "${CHECKSUMS_URL}.sig"; then
+            >&2 say_red "error: failed to download ${CHECKSUMS_URL}.sig"
             return 1
+        fi
+        if ! cosign verify-blob \
+            --bundle "${VERIFY_DIR}/checksums.txt.sig" \
+            --certificate-identity "https://github.com/pulumi/pulumi-service/.github/workflows/update-stack.yml@refs/heads/production" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "${VERIFY_DIR}/checksums.txt"; then
+            >&2 say_red "error: the checksums file's signature did not verify"
+            return 1
+        fi
+    fi
+
+    say_white "+ Verifying the checksum of ${TARBALL_PATH}..."
+    EXPECTED=$(awk -v f="${TARBALL_PATH}" '$2 == f || $2 == "*" f { print $1 }' "${VERIFY_DIR}/checksums.txt")
+    if [ -z "${EXPECTED}" ]; then
+        >&2 say_red "error: ${TARBALL_PATH} is not listed in ${CHECKSUMS_URL}"
+        return 1
+    fi
+    if command -v sha256sum >/dev/null; then
+        ACTUAL=$(sha256sum "${TARBALL_DEST}" | awk '{ print $1 }')
+    elif command -v shasum >/dev/null; then
+        ACTUAL=$(shasum -a 256 "${TARBALL_DEST}" | awk '{ print $1 }')
+    else
+        >&2 say_red "error: neither sha256sum nor shasum was found; pass --skip-checksum to install without checking"
+        return 1
+    fi
+    if [ "${ACTUAL}" != "${EXPECTED}" ]; then
+        >&2 say_red "error: checksum mismatch for ${TARBALL_PATH}: expected ${EXPECTED}, got ${ACTUAL}"
+        return 1
     fi
 }
 
 if download_tarball; then
+    if [ -z "${SKIP_CHECKSUM}" ]; then
+        verify_tarball
+    fi
+
     say_white "+ Extracting to $HOME/.pulumi/bin/customer-managed-workflow-agent"
 
     # If `~/.pulumi/bin/customer-managed-workflow-agent exists`, remove the existing files.
     # Note: handle files explicitly to avoid removing any existing configuration file
     if [ -e "${HOME}/.pulumi/bin/customer-managed-workflow-agent" ]; then
         rm -f "${HOME}/.pulumi/bin/customer-managed-workflow-agent/customer-managed-workflow-agent"
-        rm -f ${HOME}/.pulumi/bin/customer-managed-workflow-agent/workflow-runner*
+        rm -f "${HOME}"/.pulumi/bin/customer-managed-workflow-agent/workflow-runner*
         rm -f "${HOME}/.pulumi/bin/customer-managed-workflow-agent/pulumi-workflow-agent.yaml.sample"
     fi
 
@@ -149,10 +264,7 @@ if download_tarball; then
     EXTRACT_DIR=$(mktemp -dt cmda.XXXXXXXXXX)
     tar zxf "${TARBALL_DEST}" -C "${EXTRACT_DIR}"
 
-    cp ${EXTRACT_DIR}/customer-managed-workflow-agent/* "${HOME}/.pulumi/bin/customer-managed-workflow-agent/"
-
-    rm -f "${TARBALL_DEST}"
-    rm -rf "${EXTRACT_DIR}"
+    cp "${EXTRACT_DIR}"/customer-managed-workflow-agent/* "${HOME}/.pulumi/bin/customer-managed-workflow-agent/"
 else
     >&2 say_red "error: failed to download ${TARBALL_URL}"
     >&2 say_red "       check your internet and try again; if the problem persists, file an"

@@ -52,7 +52,7 @@ For example:
 ```bash
 pulumi config set agentNamespace cmwa
 pulumi config set --secret selfHostedAgentsAccessToken pul-...
-pulumi config set agentImage pulumi/customer-managed-workflow-agent:latest-amd64
+pulumi config set agentImage pulumi/customer-managed-workflow-agent:latest
 pulumi config set agentReplicas 3
 ```
 
@@ -514,7 +514,7 @@ kubectl cluster-info --context kind-pulumi-agent-dev
 # Configure the agent
 pulumi config set agentNamespace cmwa
 pulumi config set --secret selfHostedAgentsAccessToken <your-token>
-pulumi config set agentImage pulumi/customer-managed-workflow-agent:latest-amd64
+pulumi config set agentImage pulumi/customer-managed-workflow-agent:latest
 pulumi config set agentReplicas 1
 pulumi config set agentImagePullPolicy IfNotPresent
 
