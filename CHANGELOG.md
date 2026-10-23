@@ -2,7 +2,8 @@
 
 ## Unreleased
 
-* None
+Release notes for releases after v2.3.0 are on each [GitHub release](https://github.com/pulumi/customer-managed-workflow-agent/releases).
+The agent's changelog is now maintained alongside its source.
 
 ## Released
 

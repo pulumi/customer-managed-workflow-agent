@@ -1,0 +1,280 @@
+# Mirrors a release that Pulumi's release pipeline has already built, signed and uploaded to get.pulumi.com.
+# The pipeline dispatches this workflow; it builds nothing and pushes no images. It verifies the CDN
+# files and creates the GitHub release, which the pipeline treats as the "shipped" marker.
+name: Mirror Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to mirror (vX.Y.Z or vX.Y.Z-suffix)
+        required: true
+        type: string
+      sha:
+        description: Source commit the release was built from (informational)
+        required: false
+        type: string
+      base_url:
+        description: CDN folder holding the release files
+        required: true
+        type: string
+        default: https://get.pulumi.com/releases/customer-managed-workflow-agent/
+
+permissions: {}
+
+concurrency:
+  group: mirror-release
+  cancel-in-progress: false
+
+env:
+  VERSION: ${{ inputs.version }}
+  SHA: ${{ inputs.sha }}
+  BASE_URL: ${{ inputs.base_url }}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      created: ${{ steps.create.outputs.created }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Validate inputs
+        run: |
+          if [[ ! $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::version must look like vX.Y.Z or vX.Y.Z-suffix, got '$VERSION'"
+            exit 1
+          fi
+          if [[ $BASE_URL != "https://get.pulumi.com/releases/customer-managed-workflow-agent/" ]]; then
+            echo "::error::base_url must be https://get.pulumi.com/releases/customer-managed-workflow-agent/, got '$BASE_URL'"
+            exit 1
+          fi
+          if [[ -n $SHA && ! $SHA =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::sha must be a full 40-character commit SHA, got '$SHA'"
+            exit 1
+          fi
+          if [[ $GITHUB_REF != refs/heads/main ]]; then
+            echo "::error::dispatch this workflow on main, not $GITHUB_REF"
+            exit 1
+          fi
+          echo "Mirroring $VERSION (source ${SHA:-unknown}) at $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check for an existing release
+        id: existing
+        run: |
+          if is_draft=$(gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>"$RUNNER_TEMP/gh-err.txt"); then
+            if [[ $is_draft == true ]]; then
+              # A draft is what a failed upload in an earlier run leaves behind. Start over.
+              echo "::warning::Deleting leftover draft release $VERSION"
+              gh release delete "$VERSION" --repo "$GITHUB_REPOSITORY" --yes
+            else
+              echo "::notice::Release $VERSION already exists; nothing to do."
+              echo "exists=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          elif ! grep -q "release not found" "$RUNNER_TEMP/gh-err.txt"; then
+            cat "$RUNNER_TEMP/gh-err.txt" >&2
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" --silent 2>"$RUNNER_TEMP/gh-err.txt"; then
+            echo "::error::Tag $VERSION exists without a release. Check it by hand before rerunning."
+            exit 1
+          elif ! grep -q "HTTP 404" "$RUNNER_TEMP/gh-err.txt"; then
+            cat "$RUNNER_TEMP/gh-err.txt" >&2
+            exit 1
+          fi
+          echo "exists=false" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.existing.outputs.exists == 'false'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install cosign
+        if: steps.existing.outputs.exists == 'false'
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+
+      - name: Download release files
+        if: steps.existing.outputs.exists == 'false'
+        id: download
+        run: |
+          dir=$(mktemp -d)
+          plain=${VERSION#v}
+          files=()
+          for platform in darwin-arm64 darwin-x64 linux-arm64 linux-x64; do
+            files+=("customer-managed-workflow-agent-${VERSION}-${platform}.tar.gz")
+          done
+          files+=("customer-managed-workflow-agent-${plain}-checksums.txt")
+          files+=("customer-managed-workflow-agent-${plain}-release-notes.md")
+          for f in "${files[@]}"; do
+            for name in "$f" "$f.sig"; do
+              echo "Downloading ${BASE_URL}${name}"
+              curl --fail --silent --show-error --location --retry 3 -o "$dir/$name" "${BASE_URL}${name}"
+            done
+          done
+          {
+            echo "dir=$dir"
+            echo "checksums=customer-managed-workflow-agent-${plain}-checksums.txt"
+            echo "notes=customer-managed-workflow-agent-${plain}-release-notes.md"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Verify archives and checksums
+        if: steps.existing.outputs.exists == 'false'
+        run: ./scripts/verify-release.sh "$DIR" "$VERSION" "$CHECKSUMS"
+        env:
+          DIR: ${{ steps.download.outputs.dir }}
+          CHECKSUMS: ${{ steps.download.outputs.checksums }}
+
+      - name: Verify release notes
+        if: steps.existing.outputs.exists == 'false'
+        run: |
+          cosign verify-blob \
+            --bundle "$DIR/$NOTES.sig" \
+            --certificate-identity "https://github.com/pulumi/pulumi-service/.github/workflows/update-stack.yml@refs/heads/production" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$DIR/$NOTES"
+        env:
+          DIR: ${{ steps.download.outputs.dir }}
+          NOTES: ${{ steps.download.outputs.notes }}
+
+      - name: Verify image signatures
+        if: steps.existing.outputs.exists == 'false'
+        run: |
+          # customer-managed-deployment-agent is the pre-v2.0.0 image name, still published.
+          for repo in customer-managed-workflow-agent customer-managed-deployment-agent; do
+            cosign verify \
+              --certificate-identity "https://github.com/pulumi/pulumi-service/.github/workflows/update-stack.yml@refs/heads/production" \
+              --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+              "docker.io/pulumi/$repo:$VERSION" > /dev/null
+            echo "Verified docker.io/pulumi/$repo:$VERSION"
+          done
+
+      - name: Install from get.pulumi.com and smoke-test
+        if: steps.existing.outputs.exists == 'false'
+        run: ./scripts/smoke-test-install.sh "$VERSION" cdn "$RUNNER_TEMP/install-cdn"
+
+      - name: Create release
+        if: steps.existing.outputs.exists == 'false'
+        id: create
+        run: |
+          cd "$DIR"
+          # Keep the checksums file's old release-asset name so existing verification steps keep working.
+          # Cosign bundles don't depend on file names.
+          mv "$CHECKSUMS" checksums.txt
+          mv "$CHECKSUMS.sig" checksums.txt.sig
+          # Latest is set by the next step, which only ever promotes the highest final version.
+          flags=(--latest=false)
+          if [[ $VERSION == *-* ]]; then
+            flags+=(--prerelease)
+          fi
+          gh release create "$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "$VERSION" \
+            --notes-file "$NOTES" \
+            "${flags[@]}" \
+            customer-managed-workflow-agent-"$VERSION"-*.tar.gz \
+            customer-managed-workflow-agent-"$VERSION"-*.tar.gz.sig \
+            checksums.txt checksums.txt.sig
+          echo "created=true" >> "$GITHUB_OUTPUT"
+        env:
+          DIR: ${{ steps.download.outputs.dir }}
+          CHECKSUMS: ${{ steps.download.outputs.checksums }}
+          NOTES: ${{ steps.download.outputs.notes }}
+
+  # Separate from the release job so a failure here doesn't skip the docs dispatch. Re-run it on its own.
+  install-from-github:
+    name: Install from the GitHub release
+    needs: [release]
+    if: needs.release.outputs.created == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+        with:
+          cosign-release: v3.1.3
+
+      - name: Install from the GitHub release and smoke-test
+        run: ./scripts/smoke-test-install.sh "$VERSION" github "$RUNNER_TEMP/install-github"
+
+  # Its own job so a failure can be re-run from the original run; re-running the release job would see the release
+  # exists and skip.
+  promote:
+    name: Promote the latest release
+    needs: [release]
+    if: needs.release.outputs.created == 'true' && !contains(inputs.version, '-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      promoted: ${{ steps.promote.outputs.promoted }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Promote the highest final release to latest
+        id: promote
+        run: ./scripts/promote-latest.sh "$VERSION" >> "$GITHUB_OUTPUT"
+
+  # Updates pulumi.com/customer-managed-workflow-agent/latest-version, which install.sh reads.
+  # Runs only after the release exists, and only for the highest final version, so latest-version never points at a
+  # missing release or moves backwards.
+  docs:
+    name: Dispatch docs workflow
+    needs: [promote]
+    if: needs.promote.outputs.promoted == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      ESC_ACTION_OIDC_AUTH: true
+      ESC_ACTION_OIDC_ORGANIZATION: pulumi
+      ESC_ACTION_OIDC_REQUESTED_TOKEN_TYPE: urn:pulumi:token-type:access_token:organization
+      ESC_ACTION_ENVIRONMENT: github-secrets/pulumi-customer-managed-workflow-agent
+      ESC_ACTION_EXPORT_ENVIRONMENT_VARIABLES: GITHUB_TOKEN=PULUMI_BOT_TOKEN
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # A retried or delayed docs job may run after a newer version shipped. Only the current highest is dispatched.
+      - name: Check this is still the highest final release
+        id: current
+        run: ./scripts/promote-latest.sh --check "$VERSION" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Skip a superseded version
+        if: steps.current.outputs.promoted != 'true'
+        run: echo "::notice::$VERSION is no longer the highest final release; not dispatching docs."
+      - name: Fetch secrets from ESC
+        if: steps.current.outputs.promoted == 'true'
+        id: esc-secrets
+        uses: pulumi/esc-action@32dda43ffe7a2ab21e6bce11c781b44a3e5623cf # v3.2.0
+      - name: Install pulumictl
+        if: steps.current.outputs.promoted == 'true'
+        uses: jaxxstorm/action-install-gh-release@d919e59165dbc3d515e32d2bb529eca66209fc18 # v1.7.1
+        env:
+          GITHUB_TOKEN: ${{ steps.esc-secrets.outputs.PULUMI_BOT_TOKEN }}
+        with:
+          repo: pulumi/pulumictl
+          tag: v0.0.45
+      - name: Repository dispatch
+        if: steps.current.outputs.promoted == 'true'
+        run: pulumictl create cli-docs-build "$VERSION" --event-type "customer-managed-workflow-agent"

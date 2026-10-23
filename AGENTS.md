@@ -1,118 +1,36 @@
 # Customer Managed Workflow Agent
 
-Release packaging and deployment tooling for Pulumi's customer-managed workflow agents. This repository does **not** contain the agent source code -- it packages Go binaries from the `pulumi-service` submodule and provides Kubernetes deployment components, Docker images, and AWS AMI tooling.
+Release mirror and deployment tooling for Pulumi's customer-managed workflow agent. This repository does not contain the agent source and builds nothing. Pulumi's release pipeline builds, signs and publishes the agent to `get.pulumi.com` and Docker Hub, and this repository mirrors each release to GitHub. It also contains `install.sh`, the Kubernetes components and the AMI tooling.
 
-## Tech Stack
+## Validating Changes
 
-- **Build/Release**: GoReleaser v2, cosign (artifact signing)
-- **Kubernetes components**: TypeScript, Pulumi SDK (`@pulumi/pulumi` ^3, `@pulumi/kubernetes` ^4.14), Node.js 18+
-- **AMI building**: HashiCorp Packer, AWS EBS
-- **CI/CD**: GitHub Actions (tag-triggered releases via GoReleaser)
-- **Go version** (for building submodule binaries): whatever `pulumi-service/go.mod` declares; CI reads it from there
-
-## Repository Structure
-
-- `pulumi-service/` -- Git submodule pointing to `pulumi/pulumi-service`. Contains the Go source for both binaries. **Never edit files here directly.**
-- `kubernetes/` -- Pulumi TypeScript component for deploying the agent to Kubernetes (native mode). Has its own `AGENTS.md`.
-- `kubernetes-dind/` -- Pulumi TypeScript component for Kubernetes Docker-in-Docker deployment (legacy, simpler alternative)
-- `agent-images/` -- Packer template and Pulumi program for building AWS AMIs and deploying EC2 instances
-- `.goreleaser.yaml` -- Release config (builds, Docker images, manifests, signing)
-- `.goreleaser.prerelease.yaml` -- Prerelease config (no `latest` tags, no GitHub release)
-- `docker/` -- Alternative Dockerfile that installs from published releases (not used by GoReleaser)
-- `goreleaser/` -- GoReleaser output directory (gitignored, present locally after builds)
-- `workflow-runner-embeddable` -- Binary artifact copied by GoReleaser post-hook (gitignored, present locally after builds)
-
-## Development
-
-### Setup
+`.github/workflows/tests.yaml` runs these on every pull request. Run the ones for what you change:
 
 ```bash
-# Initialize the pulumi-service submodule (required before any build)
-make submodules
+tests/run.sh                                         # install.sh and scripts/, with stubbed downloads
+shellcheck install.sh scripts/*.sh tests/*.sh
+actionlint .github/workflows/*.y*ml
+cd kubernetes && yarn install && npx tsc --noEmit    # yarn
+cd kubernetes-dind && yarn install && npx -p typescript@5.9.3 tsc --noEmit             # yarn
+cd agent-images/agent-setup && npm install && npx -p typescript@5.9.3 tsc --noEmit     # npm
 ```
 
-### Validating TypeScript Components
+Changes to `install.sh` or `scripts/` should come with a test in `tests/`.
 
-There are no automated tests in this repository. Before pushing changes to TypeScript components, verify they compile:
+## Key Constraints
 
-```bash
-# Kubernetes native component
-cd kubernetes && yarn install && npx tsc --noEmit && cd ..
-
-# Kubernetes DinD component (legacy)
-cd kubernetes-dind && yarn install && npx tsc --noEmit && cd ..
-```
-
-The `agent-images/agent-setup/` program uses npm instead of yarn:
-```bash
-cd agent-images/agent-setup && npm install && npx tsc --noEmit && cd ..
-```
-
-### Local Testing with GoReleaser
-
-```bash
-# Login to your Docker Hub account first
-docker login
-
-export REPO_OWNER=<your-docker-hub-name>
-export BUILD_STAMP=$(cd ./pulumi-service && date -u '+%Y-%m-%d_%I:%M:%S%p')
-export BUILD_GIT_HASH=$(cd ./pulumi-service && git rev-parse HEAD)
-goreleaser release --skip=validate,sign,archive,publish --clean
-```
-
-GoReleaser requires a clean git working tree. Commit local changes before building.
-
-### Releasing
-
-Releases are fully automated via GitHub Actions:
-- **Release**: Push a tag matching `vX.Y.Z` (no prerelease suffix)
-- **Prerelease**: Push a tag matching `vX.Y.Z-*` (any prerelease suffix)
-
-Both workflows use `.github/workflows/stage-publish.yaml` which runs GoReleaser, builds multi-arch Docker images, and signs artifacts with cosign.
-
-## What Gets Built
-
-GoReleaser produces three binaries from the `pulumi-service` submodule:
-
-| Binary | Source directory | Platforms |
-|--------|-----------------|-----------|
-| `customer-managed-workflow-agent` | `pulumi-service/cmd/customer-managed-workflow-agent` | darwin/linux, amd64/arm64 |
-| `workflow-runner` | `pulumi-service/cmd/workflow-runner` | darwin/linux, amd64/arm64 |
-| `workflow-runner-embeddable` | `pulumi-service/cmd/workflow-runner` (same source) | linux/amd64 only |
-
-Docker images are published to Docker Hub under two names for backward compatibility:
-- `pulumi/customer-managed-workflow-agent` (current)
-- `pulumi/customer-managed-deployment-agent` (legacy name, still published)
-
-## Important Concepts
-
-### Naming History
-
-The project was renamed from `customer-managed-deployment-agent` to `customer-managed-workflow-agent` in v2.0.0. Docker images are still published under both names for backward compatibility. Be aware of this when reading older code, configs, or customer documentation.
-
-### Submodule Pinning
-
-The `pulumi-service` submodule is pinned to a specific commit. Updating it is a deliberate action:
-```bash
-cd pulumi-service && git fetch && git checkout <target-commit>
-cd .. && git add pulumi-service && git commit -m "Update pulumi-service to <short-hash>"
-```
-
-### Configuration
-
-The agent reads `pulumi-workflow-agent.yaml` at runtime. See `pulumi-workflow-agent.yaml.sample` for the format. Key fields: `token` (Pulumi access token), `service_url`, `workflow_runners_directory`, `workflow_runners_embeddable`.
+- `install.sh` and its download URLs (`github.com/.../releases/download/vX.Y.Z/customer-managed-workflow-agent-vX.Y.Z-<os>-<x64|arm64>.tar.gz`) are used by the Pulumi Cloud console and the AMI. Keep archive names and the release layout stable.
+- The GitHub release is the "shipped" marker for the release pipeline. Dispatching `mirror-release.yaml` for an existing release is a no-op, including promotion and the docs dispatch. If the promote or docs job fails, re-run that job from the original workflow run.
+- On the release, the checksums file is renamed to `checksums.txt` / `checksums.txt.sig`.
+- Only the highest final version is marked latest and dispatched to docs (`scripts/promote-latest.sh`; the docs job rechecks with `--check`), so mirroring or retrying an older version never moves `latest-version` backwards. Runs are serialized across versions.
+- Releases after v2.3.0 are signed keyless; v2.3.0 and earlier were signed with a key and verify with `cosign.pub`.
+- Images are published under two names: `pulumi/customer-managed-workflow-agent` and the pre-v2.0.0 `pulumi/customer-managed-deployment-agent`.
+- Agent code and its changelog live with the agent source. `CHANGELOG.md` here is history through v2.3.0.
 
 ## Forbidden Patterns
 
-- **Never edit files inside `pulumi-service/`** -- it is a submodule. Changes go in the `pulumi/pulumi-service` repository.
-- **Never commit the `goreleaser/` directory or `workflow-runner-embeddable` binary** -- they are build artifacts and are gitignored.
-- **Never commit secrets** (tokens, cosign private keys) -- the `cosign.key` in the repo is encrypted and requires `COSIGN_PASSWORD`.
-- **Never mix package managers** -- use yarn in `kubernetes/` and `kubernetes-dind/`, npm in `agent-images/agent-setup/`.
-
-## Changelog
-
-Update `CHANGELOG.md` when preparing a release. Use `CHANGELOG_PENDING.md` for release notes that GoReleaser includes in the GitHub release.
-
-## Nested AGENTS.md Files
-
-- `kubernetes/AGENTS.md` -- Kubernetes native deployment component (TypeScript/Pulumi)
+- **Never build or re-sign agent binaries or images here** -- the release pipeline is the only publisher. The mirror attaches the CDN files unchanged.
+- **Never loosen the mirror's input validation** (`version` format, exact `base_url`) or its signer identity.
+- **Never create release tags by hand** -- `mirror-release.yaml` creates them. A tag without a release makes the workflow fail.
+- **Never commit secrets** (tokens, private keys).
+- **Never mix package managers** -- yarn in `kubernetes/` and `kubernetes-dind/`, npm in `agent-images/agent-setup/`.

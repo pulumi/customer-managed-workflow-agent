@@ -1,3 +1,0 @@
-[submodule "pulumi-service"]
-	path = pulumi-service
-	url = git@github.com:pulumi/pulumi-service.git

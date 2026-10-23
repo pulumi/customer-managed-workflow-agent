@@ -2,7 +2,7 @@
 
 ## Prerequisites 
 
-* Build container and push to docker repository [Dockerfile](../Dockerfile)
+* Use a published agent image, e.g. `pulumi/customer-managed-workflow-agent:<tag>` from [Docker Hub](https://hub.docker.com/r/pulumi/customer-managed-workflow-agent)
 * Use `pulumi config` to set imageName, namespace, and access token
 
 * Install
