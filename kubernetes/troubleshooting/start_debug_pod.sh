@@ -39,14 +39,15 @@ POD_NAME=$(echo "$POD" | sed 's|pod/||')
 
 echo "Found pod: $POD_NAME"
 
-# Save the original command the deploy pod used as JSON array
-ORIGINAL_CMD_JSON=$(kubectl get "$POD" -n "$NAMESPACE" -o jsonpath='{.spec.containers[0].command}')
+CONTAINER="containers[?(@.name==\"$CONTAINER_NAME\")]"
+ORIGINAL_CMD=$(kubectl get "$POD" -n "$NAMESPACE" -o jsonpath="{.spec.$CONTAINER.command[*]} {.spec.$CONTAINER.args[*]}")
+ORIGINAL_CMD="${ORIGINAL_CMD% }"
 
-# Convert the JSON array to a proper bash command string
-# Remove the brackets, strip quotes, and convert to space-separated string
-ORIGINAL_CMD=$(echo "$ORIGINAL_CMD_JSON" | tr -d '[]' | sed 's/","/ /g' | sed 's/"//g')
+if [ -z "$ORIGINAL_CMD" ]; then
+  echo "Error: Pod $POD_NAME has no container named '$CONTAINER_NAME' with a command"
+  exit 1
+fi
 
-# Debug output to verify the command
 echo "Original command parsed: $ORIGINAL_CMD"
 
 # Create a debug pod name

@@ -4,7 +4,7 @@
 
 The order of troubleshooting should be as follows:
 
-1. Identify the pods you're looking for - primarily `pulumi-workflow-runner-*` pods
+1. Identify the pods you're looking for - primarily `pulumi-workflow-*` pods
     > **Note:** The agent pool has logs, as well, it's probably best to have a terminal open running:
     `kubectl logs -n <namespace> -l 'app.kubernetes.io/name=customer-managed-workflow-agent' -f`
 
@@ -97,6 +97,13 @@ Options:
 - `-l` - Label selector (default: app.kubernetes.io/component=pulumi-workflow)
 - `-c` - Container name (default: pulumi-workflow)
 - `-s` - Debug pod suffix (default: debug)
+
+When the agent hands job credentials over in a Secret (see
+[Upgrading to the Secret-based job credentials](../README.md#upgrading-to-the-secret-based-job-credentials)),
+the debug pod mounts the original job pod's credentials Secret. That Secret is
+deleted with the original pod, and running the original command fetches the
+job's definition again from Pulumi Cloud, so it works only while the original
+pod exists and its deployment is still running.
 
 ### kyverno.yaml
 
