@@ -1,8 +1,12 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
-import { PulumiSelfHostedAgentComponent } from "./agent";
+import { JobCredentialsMode, jobCredentialsModes, PulumiSelfHostedAgentComponent } from "./agent";
 
 const pulumiConfig = new pulumi.Config();
+
+const jobCredentials = pulumiConfig.get<JobCredentialsMode>("agentJobCredentials", {
+    allowedValues: [...jobCredentialsModes],
+});
 
 // Optional: render YAML to a directory instead of deploying to cluster
 const renderYamlToDirectory = pulumiConfig.get("renderYamlToDirectory");
@@ -42,6 +46,7 @@ const agent = new PulumiSelfHostedAgentComponent(
     {
         namespace: ns,
         imageName: pulumiConfig.require("agentImage"),
+        jobCredentials,
         selfHostedAgentsAccessToken: pulumiConfig.requireSecret(
             "selfHostedAgentsAccessToken",
         ),

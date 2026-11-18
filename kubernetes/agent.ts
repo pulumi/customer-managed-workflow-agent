@@ -2,9 +2,13 @@ import * as pulumi from "@pulumi/pulumi";
 import * as kubernetes from "@pulumi/kubernetes";
 import type { V1Pod } from "@kubernetes/client-node";
 
+export const jobCredentialsModes = ["prefer-secret", "secret", "configmap"] as const;
+export type JobCredentialsMode = typeof jobCredentialsModes[number];
+
 export interface PulumiSelfHostedAgentComponentArgs {
     namespace: kubernetes.core.v1.Namespace;
     imageName: pulumi.Input<string>;
+    jobCredentials?: JobCredentialsMode;
     imagePullPolicy: pulumi.Input<string>;
     agentReplicas: pulumi.Input<number>;
     selfHostedAgentsAccessToken: pulumi.Input<string>;
@@ -74,6 +78,13 @@ export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
                     apiGroups: [""],
                     resources: ["pods", "pods/log", "configmaps"],
                     verbs: ["create", "get", "list", "watch", "update", "delete"],
+                },
+                // Create only: Kubernetes deletes each job's Secrets with the Pod that owns them, and every other
+                // Secret verb, delete included, can return Secret contents.
+                {
+                    apiGroups: [""],
+                    resources: ["secrets"],
+                    verbs: ["create"],
                 },
             ],
         }, { parent: this });
@@ -178,6 +189,10 @@ export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
                                         },
                                     },
                                     {
+                                        name: "PULUMI_AGENT_JOB_CREDENTIALS",
+                                        value: args.jobCredentials ?? "secret",
+                                    },
+                                    {
                                         name: "PULUMI_AGENT_IMAGE_PULL_POLICY",
                                         valueFrom: {
                                             configMapKeyRef: {
@@ -249,7 +264,7 @@ export class PulumiSelfHostedAgentComponent extends pulumi.ComponentResource {
                     },
                 },
             },
-        }, { parent: this });
+        }, { parent: this, dependsOn: [this.agentRole, this.agentRoleBinding] });
 
         // Create service to expose metrics and health endpoints
         this.agentService = new kubernetes.core.v1.Service("deployment-agent-service", {

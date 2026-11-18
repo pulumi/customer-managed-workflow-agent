@@ -28,6 +28,7 @@ pulumi up
 | `agentNamespace` | Yes | -- | Kubernetes namespace for all resources |
 | `selfHostedAgentsAccessToken` | Yes (secret) | -- | Pulumi agent pool access token |
 | `agentImage` | Yes | -- | Docker image reference |
+| `agentJobCredentials` | No | `secret` | `PULUMI_AGENT_JOB_CREDENTIALS`: `prefer-secret`, `secret` or `configmap` |
 | `agentReplicas` | No | `3` | Number of agent pods |
 | `agentImagePullPolicy` | No | `Always` | K8s image pull policy |
 | `selfHostedServiceURL` | No | `https://api.pulumi.com` | Pulumi service API URL |
@@ -40,7 +41,7 @@ pulumi up
 The component creates these Kubernetes resources:
 - **ConfigMap** (`agent-config`) -- service URL, image name, pull policy, worker pod template
 - **Secret** (`agent-secret`) -- agent access token
-- **ServiceAccount + Role + RoleBinding** -- RBAC for managing worker pods and configmaps
+- **ServiceAccount + Role + RoleBinding** -- RBAC for managing worker pods and configmaps, and `create` (only) on secrets
 - **Deployment** (`workflow-agent-pool`) -- the agent pool itself, with health port 8080
 - **Service** (`deployment-agent-service`) -- exposes `/healthz` with Prometheus annotations
 - **ServiceMonitor** (optional) -- Prometheus Operator integration
@@ -51,4 +52,6 @@ Worker pods are spawned by the agent at runtime and configured via strategic mer
 
 - The worker pod container must be named `pulumi-workflow` for merge patches to apply correctly
 - Custom CA certificates replace the entire system trust store -- always combine with system CAs (see `../kubernetes/README.md`)
+- The Role grants `create` on secrets and no other secret verb; job Secrets are owned by their Pod and deleted with it. Never add any other verb on secrets
+- The agent Deployment `dependsOn` the Role and RoleBinding, so `PULUMI_AGENT_JOB_CREDENTIALS=secret` never runs without the permission
 - The `renderYamlToDirectory` mode produces plaintext secrets in YAML files -- never commit those
