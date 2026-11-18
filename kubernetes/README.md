@@ -3,6 +3,13 @@
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
+- [Upgrading to the Secret-based job credentials](#upgrading-to-the-secret-based-job-credentials)
+  - [Upgrading with this program](#upgrading-with-this-program)
+  - [Upgrading rendered or hand-maintained manifests](#upgrading-rendered-or-hand-maintained-manifests)
+  - [PULUMI_AGENT_JOB_CREDENTIALS](#pulumi_agent_job_credentials)
+  - [What the agent creates for each job](#what-the-agent-creates-for-each-job)
+  - [Pinning and rolling back](#pinning-and-rolling-back)
+  - [Removing objects left by earlier jobs](#removing-objects-left-by-earlier-jobs)
 - [Monitoring and Metrics](#monitoring-and-metrics)
   - [Basic Health Monitoring](#basic-health-monitoring)
   - [Prometheus Integration](#prometheus-integration)
@@ -60,6 +67,161 @@ Optionally you can set an `agentImagePullPolicy` to a
 [Kubernetes supported value][k8s-pull-policy], which defaults to `Always`.
 
 [k8s-pull-policy]: https://kubernetes.io/docs/concepts/containers/images/#image-pull-policy
+
+Other optional settings:
+
+- `agentJobCredentials` sets `PULUMI_AGENT_JOB_CREDENTIALS` on the agent, which
+  defaults to `secret` here. See
+  [PULUMI_AGENT_JOB_CREDENTIALS](#pulumi_agent_job_credentials).
+
+## Upgrading to the Secret-based job credentials
+
+Agent releases with the `PULUMI_AGENT_JOB_CREDENTIALS` setting hand each job
+its credentials in a Kubernetes Secret that only the job's Pod mounts and that
+Kubernetes deletes with the Pod. The agent's Role must allow it to create
+Secrets. Without that, the agent keeps using a ConfigMap and logs a warning,
+with a link to this section, on every job.
+
+Before you upgrade, if you supply a [pod template](#pod-spec-configuration) or
+use admission policies, check them against
+[What the agent creates for each job](#what-the-agent-creates-for-each-job).
+The agent checks the pod template only when it uses a Secret, so a template
+that works today can fail jobs after the upgrade.
+
+### Upgrading with this program
+
+1. If you pin `agentImage` to a version, set it to the new release.
+2. Update your copy of this program and run `pulumi up`. It adds the rule
+   below to the agent's Role, sets `PULUMI_AGENT_JOB_CREDENTIALS=secret`, and
+   updates the agent Deployment after the Role. This restarts the agent Pods,
+   all at once when `agentImage` changes. A deployment that runs during the
+   restart can fail or leave its job Pod behind (see
+   [Removing objects left by earlier jobs](#removing-objects-left-by-earlier-jobs)).
+   With a `latest` tag, the Pods pull the new release only with the default
+   `Always` pull policy. If the Pods did not restart, run
+   `kubectl -n <agent namespace> rollout restart deployment/workflow-agent-pool`.
+3. Run a deployment. Its log shows `Credentials Secret created` and no
+   `ConfigMap created` line.
+
+### Upgrading rendered or hand-maintained manifests
+
+Apply the changes in this order:
+
+1. Add this rule to the agent's Role and apply the Role first:
+
+   ```yaml
+   - apiGroups: [""]
+     resources: ["secrets"]
+     verbs: ["create"]
+   ```
+
+   With manifests rendered by this program, apply the Role and RoleBinding
+   files before the rest:
+
+   ```bash
+   grep -lE '^kind: (Role|RoleBinding)$' ./rendered-manifests/1-manifest/*.yaml | xargs -n1 kubectl apply -f
+   ```
+
+2. If `PULUMI_AGENT_IMAGE` (in the `agent-config` ConfigMap, with manifests
+   rendered by this program) names a version tag, a digest or a mirror, move
+   it to the new release before the agent image. An earlier agent works with
+   the newer runner, but a newer agent does not work with an earlier runner.
+   Pulumi's image with no tag or a `latest` tag needs no change.
+3. Set `PULUMI_AGENT_JOB_CREDENTIALS=secret` on the agent container, set the
+   agent image to the new release, and apply the Deployment.
+4. Run a deployment. Its log shows `Credentials Secret created` and no
+   `ConfigMap created` line.
+
+### PULUMI_AGENT_JOB_CREDENTIALS
+
+- `secret` (recommended): always use a Secret. A job fails in Setup, with the
+  reason, when the agent may not create Secrets. This program sets this value.
+- `prefer-secret` (the default when unset, so installs whose Role does not
+  allow Secrets yet keep working): use a Secret when the agent may create
+  Secrets in its namespace. Otherwise use a ConfigMap and log a warning in the
+  deployment log and the agent log.
+- `configmap`: use a ConfigMap even when the agent may create Secrets, with
+  the same warning. Use it to go back to the earlier behavior without removing
+  the Role rule.
+
+With any value, a job whose image needs registry credentials fails in Setup
+when the agent may not create Secrets, and a job fails in Setup when the
+permission check returns an error other than 403. Any other value fails every
+job in Setup. Agent releases without this setting ignore it.
+
+### What the agent creates for each job
+
+- A Pod `pulumi-workflow-<suffix>`, where the suffix is five random letters,
+  labeled `app.kubernetes.io/name=workflow-runner` and
+  `app.kubernetes.io/component=pulumi-workflow`.
+- A Secret `pulumi-workflow-<suffix>-credentials`, mounted read-only at
+  `/mnt/pulumi/credentials` in the `pulumi-workflow` container.
+- A Secret `pulumi-workflow-<suffix>-registry`, only when the job's image
+  needs registry credentials. The agent creates it in either mode, so these
+  jobs need the Role rule either way.
+
+The Pod owns both Secrets, so Kubernetes deletes them with the Pod. Grant the
+agent only `create` on Secrets: `delete` and `deletecollection` can return
+Secret contents. Run the agent in a namespace of its own, as this program does.
+
+A [pod template](#pod-spec-configuration) must not change the
+`pulumi-workflow` container's `command` or `args`, the credentials volume or
+its mount, and must not mount anything else at or under
+`/mnt/pulumi/credentials`. When the agent uses a Secret, it checks this and
+fails the job in Setup, naming the field.
+An admission policy that restricts Secret creation or `secret` volumes must
+let the agent's service account create Secrets in its namespace and let job
+Pods mount them.
+
+The agent checks whether it may create Secrets with a
+`SelfSubjectAccessReview`, which Kubernetes allows through the
+`system:basic-user` ClusterRoleBinding. If your cluster removed that binding,
+`prefer-secret` uses a ConfigMap and `secret` fails every job in Setup.
+Restore the binding.
+
+### Pinning and rolling back
+
+- To pin the agent, set `agentImage` to a version tag, such as
+  `pulumi/customer-managed-workflow-agent:vX.Y.Z`.
+- To go back to the ConfigMap without changing the image, set
+  `agentJobCredentials` (or `PULUMI_AGENT_JOB_CREDENTIALS`) to `configmap` and
+  keep the Role rule.
+- To roll back the image, set `agentImage`, and `PULUMI_AGENT_IMAGE` if you
+  set it separately, to the earlier release. Keep the Role: it still allows
+  the `configmaps` access earlier releases use. Earlier releases cannot delete
+  the registry Secrets they create under this Role; remove leftover ones as
+  shown below.
+
+### Removing objects left by earlier jobs
+
+The agent does not remove job ConfigMaps from earlier releases or job Pods
+left behind, for example by an agent restart during a job. Remove them by
+label:
+
+```bash
+NS=<agent namespace>
+SELECTOR=app.kubernetes.io/name=workflow-runner,app.kubernetes.io/component=pulumi-workflow
+
+kubectl -n "$NS" get configmaps,pods -l "$SELECTOR"
+kubectl -n "$NS" get secrets -l "$SELECTOR" --field-selector type=kubernetes.io/dockerconfigjson
+```
+
+- Delete the ConfigMaps only when no job Pod is `Pending`: a job that has not
+  started yet fails without its ConfigMap.
+- Delete a registry Secret `<pod name>-registry` only when the Pod
+  `<pod name>` no longer exists.
+- Never delete job Pods with `--cascade=orphan`, which leaves their Secrets
+  with no owner.
+- Make sure `PULUMI_AGENT_DEBUG_POD` is not set on the agent. With it, every
+  job leaves its Pod behind, with its Secrets or its ConfigMap.
+
+```bash
+kubectl -n "$NS" delete pods -l "$SELECTOR" --field-selector=status.phase=Succeeded
+kubectl -n "$NS" delete pods -l "$SELECTOR" --field-selector=status.phase=Failed
+kubectl -n "$NS" delete pod <name of a Pending pod older than a few minutes>
+kubectl -n "$NS" delete configmaps -l "$SELECTOR"
+kubectl -n "$NS" delete secret <pod name>-registry
+```
 
 ## Monitoring and Metrics
 
@@ -235,7 +397,10 @@ The manifests will be generated in subdirectories:
 ### Applying Rendered Manifests
 
 Due to Kubernetes resource ordering, apply the manifests in two steps to ensure
-the namespace exists before namespaced resources are created:
+the namespace exists before namespaced resources are created. To upgrade an
+existing install to Secret-based job credentials, follow
+[Upgrading rendered or hand-maintained manifests](#upgrading-rendered-or-hand-maintained-manifests)
+instead:
 
 ```bash
 # Step 1: Apply the CRD's if they exist
