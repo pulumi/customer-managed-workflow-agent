@@ -135,7 +135,7 @@ jobs:
         run: |
           cosign verify-blob \
             --bundle "$DIR/$NOTES.sig" \
-            --certificate-identity "https://github.com/pulumi/pulumi-service/.github/workflows/update-stack.yml@refs/heads/production" \
+            --certificate-identity-regexp '^https://github\.com/pulumi/pulumi-service/\.github/workflows/[^/]+@refs/heads/production$' \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "$DIR/$NOTES"
         env:
@@ -148,7 +148,7 @@ jobs:
           # customer-managed-deployment-agent is the pre-v2.0.0 image name, still published.
           for repo in customer-managed-workflow-agent customer-managed-deployment-agent; do
             cosign verify \
-              --certificate-identity "https://github.com/pulumi/pulumi-service/.github/workflows/update-stack.yml@refs/heads/production" \
+              --certificate-identity-regexp '^https://github\.com/pulumi/pulumi-service/\.github/workflows/[^/]+@refs/heads/production$' \
               --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
               "docker.io/pulumi/$repo:$VERSION" > /dev/null
             echo "Verified docker.io/pulumi/$repo:$VERSION"

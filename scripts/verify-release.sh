@@ -17,7 +17,7 @@ DIR=$1
 VERSION=$2
 CHECKSUMS=$3
 
-CERT_IDENTITY=${CERT_IDENTITY:-https://github.com/pulumi/pulumi-service/.github/workflows/update-stack.yml@refs/heads/production}
+CERT_IDENTITY_REGEXP=${CERT_IDENTITY_REGEXP:-'^https://github\.com/pulumi/pulumi-service/\.github/workflows/[^/]+@refs/heads/production$'}
 CERT_OIDC_ISSUER=${CERT_OIDC_ISSUER:-https://token.actions.githubusercontent.com}
 
 if [[ ! $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
@@ -35,7 +35,7 @@ verify_blob() {
   echo "--- verifying signature of ${file}"
   cosign verify-blob \
     --bundle "${file}.sig" \
-    --certificate-identity "$CERT_IDENTITY" \
+    --certificate-identity-regexp "$CERT_IDENTITY_REGEXP" \
     --certificate-oidc-issuer "$CERT_OIDC_ISSUER" \
     "$file"
 }
