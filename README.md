@@ -32,7 +32,7 @@ file is a cosign bundle. Download the files from the release, then verify the si
 ```bash
 cosign verify-blob \
   --bundle checksums.txt.sig \
-  --certificate-identity https://github.com/pulumi/pulumi-service/.github/workflows/update-stack.yml@refs/heads/production \
+  --certificate-identity-regexp '^https://github\.com/pulumi/pulumi-service/\.github/workflows/[^/]+@refs/heads/production$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   checksums.txt
 ```
@@ -77,7 +77,7 @@ The `pulumi/customer-managed-workflow-agent` images on Docker Hub are signed by 
 
 ```bash
 cosign verify \
-  --certificate-identity https://github.com/pulumi/pulumi-service/.github/workflows/update-stack.yml@refs/heads/production \
+  --certificate-identity-regexp '^https://github\.com/pulumi/pulumi-service/\.github/workflows/[^/]+@refs/heads/production$' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com \
   docker.io/pulumi/customer-managed-workflow-agent:<tag>
 ```

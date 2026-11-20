@@ -37,7 +37,7 @@ expect_reject() {
 new_case
 make_release
 run_verify
-if [ $RC -eq 0 ] && [ "$(grep -c -- '--certificate-identity https://github.com/pulumi/pulumi-service/.github/workflows/update-stack.yml@refs/heads/production' "$CASE/cosign.log")" -eq 5 ]; then
+if [ $RC -eq 0 ] && [ "$(grep -cF -- "--certificate-identity-regexp ^https://github\.com/pulumi/pulumi-service/\.github/workflows/[^/]+@refs/heads/production$" "$CASE/cosign.log")" -eq 5 ]; then
   pass "accepts a valid release and checks all five signatures against the release signer"
 else
   fail "accepts a valid release and checks all five signatures against the release signer" "rc=$RC" "$(cat "$CASE/out")"

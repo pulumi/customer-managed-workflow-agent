@@ -118,7 +118,7 @@ new_case
 publish 2.4.0 github
 run_install --version 2.4.0 --verify-signature
 if [ $RC -eq 0 ] && grep -q -- "--bundle .*checksums.txt.sig" "$CASE/cosign.log" &&
-  grep -q -- "--certificate-identity https://github.com/pulumi/pulumi-service/.github/workflows/update-stack.yml@refs/heads/production" "$CASE/cosign.log" &&
+  grep -qF -- '--certificate-identity-regexp ^https://github\.com/pulumi/pulumi-service/\.github/workflows/[^/]+@refs/heads/production$' "$CASE/cosign.log" &&
   grep -q -- "--certificate-oidc-issuer https://token.actions.githubusercontent.com" "$CASE/cosign.log"; then
   pass "--verify-signature verifies the checksums file against the release signer"
 else
