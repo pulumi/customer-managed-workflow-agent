@@ -45,6 +45,16 @@ fi
 
 new_case
 make_release
+CERT_IDENTITY=https://example.com/exact run_verify
+if [ $RC -eq 0 ] && [ "$(grep -cF -- "--certificate-identity https://example.com/exact" "$CASE/cosign.log")" -eq 5 ] &&
+  ! grep -qF -- "--certificate-identity-regexp" "$CASE/cosign.log"; then
+  pass "CERT_IDENTITY overrides the signer with an exact identity"
+else
+  fail "CERT_IDENTITY overrides the signer with an exact identity" "rc=$RC" "$(cat "$CASE/cosign.log")"
+fi
+
+new_case
+make_release
 export COSIGN_EXIT=1
 expect_reject "rejects a bad signature"
 

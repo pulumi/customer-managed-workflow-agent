@@ -4,8 +4,8 @@
 # Usage: verify-release.sh <dir> <vX.Y.Z> <checksums-file>
 #
 # <dir> holds the four archives, <checksums-file>, and a .sig for each of them.
-# Each .sig is a cosign bundle signed by Pulumi's release pipeline. CERT_IDENTITY and CERT_OIDC_ISSUER
-# override the expected signer.
+# Each .sig is a cosign bundle signed by Pulumi's release pipeline. CERT_IDENTITY (an exact identity)
+# or CERT_IDENTITY_REGEXP, and CERT_OIDC_ISSUER, override the expected signer.
 set -euo pipefail
 
 if [[ $# -ne 3 ]]; then
@@ -17,7 +17,12 @@ DIR=$1
 VERSION=$2
 CHECKSUMS=$3
 
-CERT_IDENTITY_REGEXP=${CERT_IDENTITY_REGEXP:-'^https://github\.com/pulumi/pulumi-service/\.github/workflows/(update-stack\.yml|publish-release\.yml)@refs/heads/production$'}
+CERT_IDENTITY_REGEXP=${CERT_IDENTITY_REGEXP:-'^https://github\.com/pulumi/pulumi-service/\.github/workflows/[^/]+@refs/heads/production$'}
+if [[ -n "${CERT_IDENTITY:-}" ]]; then
+  IDENTITY_FLAGS=(--certificate-identity "$CERT_IDENTITY")
+else
+  IDENTITY_FLAGS=(--certificate-identity-regexp "$CERT_IDENTITY_REGEXP")
+fi
 CERT_OIDC_ISSUER=${CERT_OIDC_ISSUER:-https://token.actions.githubusercontent.com}
 
 if [[ ! $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
@@ -35,7 +40,7 @@ verify_blob() {
   echo "--- verifying signature of ${file}"
   cosign verify-blob \
     --bundle "${file}.sig" \
-    --certificate-identity-regexp "$CERT_IDENTITY_REGEXP" \
+    "${IDENTITY_FLAGS[@]}" \
     --certificate-oidc-issuer "$CERT_OIDC_ISSUER" \
     "$file"
 }
