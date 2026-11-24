@@ -30,7 +30,7 @@ Changes to `install.sh` or `scripts/` should come with a test in `tests/`.
 ## Forbidden Patterns
 
 - **Never build or re-sign agent binaries or images here** -- the release pipeline is the only publisher. The mirror attaches the CDN files unchanged.
-- **Never loosen the mirror's input validation** (`version` format, exact `base_url`) or its signer identity.
+- **Never loosen the mirror's input validation** (`version` format, exact `base_url`) or its signer identity: a pulumi-service workflow on the protected `production` branch. Any workflow file there is accepted on purpose, so renaming the release workflow doesn't break customers' copied checks; never widen it to other branches or repositories.
 - **Never create release tags by hand** -- `mirror-release.yaml` creates them. A tag without a release makes the workflow fail.
 - **Never commit secrets** (tokens, private keys).
 - **Never mix package managers** -- yarn in `kubernetes/` and `kubernetes-dind/`, npm in `agent-images/agent-setup/`.

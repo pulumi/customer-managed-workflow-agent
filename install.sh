@@ -218,7 +218,7 @@ verify_tarball() {
         fi
         if ! cosign verify-blob \
             --bundle "${VERIFY_DIR}/checksums.txt.sig" \
-            --certificate-identity "https://github.com/pulumi/pulumi-service/.github/workflows/update-stack.yml@refs/heads/production" \
+            --certificate-identity-regexp '^https://github\.com/pulumi/pulumi-service/\.github/workflows/[^/]+@refs/heads/production$' \
             --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
             "${VERIFY_DIR}/checksums.txt"; then
             >&2 say_red "error: the checksums file's signature did not verify"

@@ -37,10 +37,20 @@ expect_reject() {
 new_case
 make_release
 run_verify
-if [ $RC -eq 0 ] && [ "$(grep -c -- '--certificate-identity https://github.com/pulumi/pulumi-service/.github/workflows/update-stack.yml@refs/heads/production' "$CASE/cosign.log")" -eq 5 ]; then
+if [ $RC -eq 0 ] && [ "$(grep -cF -- "--certificate-identity-regexp ^https://github\.com/pulumi/pulumi-service/\.github/workflows/[^/]+@refs/heads/production$" "$CASE/cosign.log")" -eq 5 ]; then
   pass "accepts a valid release and checks all five signatures against the release signer"
 else
   fail "accepts a valid release and checks all five signatures against the release signer" "rc=$RC" "$(cat "$CASE/out")"
+fi
+
+new_case
+make_release
+CERT_IDENTITY=https://example.com/exact run_verify
+if [ $RC -eq 0 ] && [ "$(grep -cF -- "--certificate-identity https://example.com/exact" "$CASE/cosign.log")" -eq 5 ] &&
+  ! grep -qF -- "--certificate-identity-regexp" "$CASE/cosign.log"; then
+  pass "CERT_IDENTITY overrides the signer with an exact identity"
+else
+  fail "CERT_IDENTITY overrides the signer with an exact identity" "rc=$RC" "$(cat "$CASE/cosign.log")"
 fi
 
 new_case
