@@ -17,7 +17,7 @@ DIR=$1
 VERSION=$2
 CHECKSUMS=$3
 
-CERT_IDENTITY_REGEXP=${CERT_IDENTITY_REGEXP:-'^https://github\.com/pulumi/pulumi-service/\.github/workflows/[^/]+@refs/heads/production$'}
+CERT_IDENTITY_REGEXP=${CERT_IDENTITY_REGEXP:-'^https://github\.com/pulumi/pulumi-service/\.github/workflows/(update-stack\.yml|publish-release\.yml)@refs/heads/production$'}
 CERT_OIDC_ISSUER=${CERT_OIDC_ISSUER:-https://token.actions.githubusercontent.com}
 
 if [[ ! $VERSION =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
